@@ -72,9 +72,17 @@ struct
 
   (* Initial state *)
 
-  val init_state : state =
+  val init_state1 : state =
     generate_pattern ["at_L", "door_locked"]
 
-  fun test1 () = run get_through_door init_state door_bot_spec
+  val init_state2 : state =
+    generate_pattern ["at_L", "door_locked", "have_key"]
+
+
+  fun testDoors init = run get_through_door init door_bot_spec
+
+  fun test1 () = testDoors init_state1
+  
+  fun test2 () = testDoors init_state2
 
 end

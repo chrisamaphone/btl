@@ -32,33 +32,35 @@ structure BTL = struct
   type trace = string list
 
 
-  (* Return a new state on success; NONE on failure *)
-  fun run (expr : btl) (state : state) (spec: spec) trace =
+  (* Return a new state on success; NONE on failure
+  * as well as a trace of actions (string list)
+  * *)
+  fun runTrace (expr : btl) (state : state) (spec: spec) trace =
     case expr of
         Skip => (SOME state, ("SUCCESS: skip")::trace)
       | Seq nil => (SOME state, ("SUCCESS: end of seq")::trace)
       | Seq (B::Bs) =>
           let
-            val (stateOpt, trace) = run B state spec trace
+            val (stateOpt, trace) = runTrace B state spec trace
           in
             case stateOpt of
                  SOME state' => 
-                    run (Seq Bs) state' spec trace
+                    runTrace (Seq Bs) state' spec trace
                | NONE => (NONE, "FAILURE: sequence"::trace)
           end
       | Sel nil => (NONE, "FAILURE: end of sel"::trace)
       | Sel (B::Bs) =>
           let
-            val (stateOpt, trace) = run B state spec trace
+            val (stateOpt, trace) = runTrace B state spec trace
           in
             case stateOpt of
                  NONE => 
-                    run (Sel Bs) state spec trace
+                    runTrace (Sel Bs) state spec trace
                | SOME state' => (SOME state', "SUCCESS: selector"::trace)
           end
       | Cond (C, B) =>
           if (satisfies state C) then 
-            run B state spec ("condition satisfied"::trace)
+            runTrace B state spec ("condition satisfied"::trace)
           else (NONE, "condition failed"::trace)
       | Just action => 
           let
@@ -66,5 +68,12 @@ structure BTL = struct
           in
             (state', result::trace)
           end
+
+  fun run e state spec = 
+    let
+      val (outcome, trace) = runTrace e state spec []
+    in
+      (rev trace, outcome)
+    end
 
 end

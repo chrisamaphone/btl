@@ -14,34 +14,57 @@ structure BTL = struct
   fun satisfies (state: state) (cond: pos) =
     true (* XXX *)
 
-  fun try_doing (action, args) state spec =
-    NONE (* XXX *)
+  fun try_doing ((action, args) : btl_op) (state : state) (spec : spec) 
+    : (state option) * string =
+    case lookupRule action spec of
+         NONE => (NONE, "no rule for action "^action)
+       | SOME {pre, post} =>
+           (case split pre state of
+                 NONE => (NONE, "FAILURE: action "^action)
+               | SOME state' => 
+                   let
+                     val state'' = state' @ (generate_pattern post)
+                   in
+                     (SOME state'', "SUCCESS: action "^action)
+                   end
+            )
+
+  type trace = string list
+
 
   (* Return a new state on success; NONE on failure *)
-  fun run (expr : btl) (state : state) (spec: spec) =
+  fun run (expr : btl) (state : state) (spec: spec) trace =
     case expr of
-        Skip => SOME state
-      | Seq nil => SOME state
+        Skip => (SOME state, ("SUCCESS: skip")::trace)
+      | Seq nil => (SOME state, ("SUCCESS: end of seq")::trace)
       | Seq (B::Bs) =>
           let
-            val stateOpt = run B state spec
+            val (stateOpt, trace) = run B state spec trace
           in
             case stateOpt of
-                 SOME state' => run (Seq Bs) state' spec
-               | NONE => NONE
+                 SOME state' => 
+                    run (Seq Bs) state' spec trace
+               | NONE => (NONE, "FAILURE: sequence"::trace)
           end
-      | Sel nil => NONE
+      | Sel nil => (NONE, "FAILURE: end of sel"::trace)
       | Sel (B::Bs) =>
           let
-            val stateOpt = run B state spec
+            val (stateOpt, trace) = run B state spec trace
           in
             case stateOpt of
-                 NONE => run (Sel Bs) state spec
-               | SOME state' => SOME state'
+                 NONE => 
+                    run (Sel Bs) state spec trace
+               | SOME state' => (SOME state', "SUCCESS: selector"::trace)
           end
       | Cond (C, B) =>
-          if (satisfies state C) then run B state spec
-          else NONE
-      | Just action => try_doing action state spec
+          if (satisfies state C) then 
+            run B state spec ("condition satisfied"::trace)
+          else (NONE, "condition failed"::trace)
+      | Just action => 
+          let
+            val (state', result) = try_doing action state spec
+          in
+            (state', result::trace)
+          end
 
 end

@@ -3,8 +3,9 @@ structure BTL = struct
   (* Linear logic-based interface types *)
   type term = string
   type predicate = string
-  type atom = predicate * (term list)
-  datatype pos = One | Tensor of pos * pos | At of atom
+  type atom = string (* predicate * (term list) *)
+  (* datatype pos = One | Tensor of pos * pos | At of atom *)
+  type pos = atom list
   datatype neg = NPos of pos | NLolli of pos * neg | NTens of pos * neg
 
   (* Behavior Tree expressions *)
@@ -19,21 +20,24 @@ structure BTL = struct
   datatype resource = 
       Var of var 
     | App of rulename * (term list) * (resource list)
-  datatype pos_proof =
+  (* datatype pos_proof =
     Unit | Res of resource | Pair of pos_proof * pos_proof 
+  *)
+  type pos_proof = resource list
   datatype neg_proof = 
     Pos of pos_proof
   | Lam of pattern * neg_proof
   | NPair of pos_proof * neg_proof
   | Let of pattern * resource * neg_proof
 
-  type op_spec = 
+  (* Signatures and contexts *)
+  type action_spec = 
     { name: rulename, 
       args: string list, 
       antecedent: pos,
       consequent: pos}
-  type op_sig = op_spec list
-
+  type spec = action_spec list
+  type state = (var * atom) list
 
 
   exception unimpl
@@ -49,11 +53,17 @@ structure BTL = struct
   end
 
   fun generate_pattern (P : pos) =
+    case P of
+         [] => []
+       | (x::xs) => (fresh(), x)::(generate_pattern xs)
+    (*
     case P of 
          One => []
        | Tensor (S1, S2) => (generate_pattern S1)@(generate_pattern S2)
        | At _ => [fresh()]
+    *)
 
+(* Not needed if pos-es are lists
   fun posToList (S : pos) : atom list =
     case S of
          One => []
@@ -71,7 +81,8 @@ structure BTL = struct
          [] => Unit
        | [r] => Res r
        | (r::rs) => Pair (Res r, resListToProof rs)
-
+*)
+       
   fun rember' x ys f prefix_cont =
     case ys of
          (y::ys) => if f x y then SOME (prefix_cont ys)
@@ -88,6 +99,22 @@ structure BTL = struct
        | ([], []) => []
        
   
+  (* 
+  *  match_lists xs ys f -- use xs to plug ys; return used, unused, and matched
+  *
+  *  xs : 'a list           --- haves
+  *  ys : 'b list           --- needs
+  *  f  : 'b -> 'a -> bool  --- determine whether need is satisfied by a have
+  *  matched : 'b list      --- accumulator for matched needs so far
+  *  unmatched : 'b list    --- accumulator for unmatched needs so far
+  *  ===>
+  *     {unused : 'a list, matched : 'b list, unmatched : 'b list}
+  *
+  * where 
+  *   [unused] is the subset of xs not used to meet a need in ys,
+  *   [matched] is the subset of ys satisfied by an x, and
+  *   [unmatched] is the subset of ys not satisfied by an x.
+  *)
   fun match_lists xs ys f matched unmatched =
     case ys of 
          []       => {unused = xs, sat = matched, unsat = unmatched}
@@ -96,12 +123,71 @@ structure BTL = struct
                 SOME xs' => match_lists xs' ys f (y::matched) unmatched
                | NONE => match_lists xs ys f matched (y::unmatched))
 
+  (* resourceMaches have need => {unused : , sat : , unsat : } *)
   fun resourceMatches have need =
     match_lists have need match_snd [] []
 
   val test_resources = [(1, "foo"), (2, "bar"), (3, "foo"), (4, "baz")]
   val test_needs = ["foo", "bar", "bar", "quux"]
 
+
+  val test_neg = 
+    NTens (["a", "b"], 
+          NLolli (["c", "d"], NPos ["a", "d"]))
+
+  val test_ctx = generate_pattern ["a", "c"]
+
+  (* returns list of haves and a new neg 
+  *
+  *   attachHavesToNeeds resources N =>
+  *       (resources', N')
+  *   where resources' is all of the resources that did not
+  *     match up to an input in N,
+  *   and N' is the new interface with some of N's holes plugged by input
+  *     resources.
+  *
+  *   Note: this is the "proof-irrelevant" version.
+  * *)
+  fun attachHavesToNeeds (resources) (N : neg) =
+    case N of
+         NPos P => (resources, NPos P) (* No holes to plug *)
+       | NTens (P, N) => 
+          (* No immediate holes to plug, but nester expr might have some *)
+           let
+             val (unused, N') = attachHavesToNeeds resources N
+           in
+             (unused, NTens (P, N'))
+           end
+       | NLolli (P, N) => (* Some immediate holes might be pluggable *)
+           let
+             val {unused, sat, unsat} = resourceMatches resources P
+             val (unused', N') = attachHavesToNeeds unused N
+           in
+             (unused', NLolli (unsat, N'))
+           end
+
+  (* returns a proof term in addition to the above *)
+  (* Last case is complex
+  fun combineProofs (resources) (Pf : neg_proof) (N : neg) =
+    case (Pf, N) of
+         (Pos pf, NPos P) => (resources, Pos pf, NPos P)
+       | (NPair(posPf, negPf), NTens (P, N)) => 
+           let
+             val (unused, negPf', N') = combineProofs resources negPf N
+           in
+             (unused, NPair(posPf, negPf'), NTens (P, N'))
+           end
+       | (Lam (pat, negProof), NLolli (P, N)) =>
+           let
+             val {unused, sat, unsat} = resourceMatches resources P
+             val (unused', negPf', N') = combineProofs unused negProof N
+           in
+             (unused', NLolli (unsat, N'))
+           end
+  *)
+
+
+  (*
 
   (* sequence an op of type S1 -o S2 with a term P : N *)
   fun seq (oper : resource) (S1 : pos) (S2 : pos) (P : neg_proof) (N : neg)
@@ -141,6 +227,6 @@ structure BTL = struct
          _ => raise unimpl
 
   (* tests *)
-
+  *)
 
 end

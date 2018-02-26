@@ -45,48 +45,6 @@ struct
           else
             SOME {pre=antecedent : atom list, post=consequent : atom list}
 
-
-  val gensym = ref 0
-
-  fun fresh() =
-  let
-    val ans = !gensym
-    val () = gensym := ans + 1
-  in
-    ans
-  end
-
-  fun generate_pattern (P : pos) =
-    case P of
-         [] => []
-       | (x::xs) => (fresh(), x)::(generate_pattern xs)
-    (*
-    case P of 
-         One => []
-       | Tensor (S1, S2) => (generate_pattern S1)@(generate_pattern S2)
-       | At _ => [fresh()]
-    *)
-
-(* Not needed if pos-es are lists
-  fun posToList (S : pos) : atom list =
-    case S of
-         One => []
-       | Tensor(S1, S2) => (posToList S1)@(posToList S2)
-       | At a => [a]
-
-  fun posProofToList (X : pos_proof) : resource list =
-    case X of
-         Unit => []
-       | Pair (X1, X2) => (posProofToList X1)@(posProofToList X2)
-       | Res r => [r]
-
-  fun resListToProof rs = 
-    case rs of
-         [] => Unit
-       | [r] => Res r
-       | (r::rs) => Pair (Res r, resListToProof rs)
-*)
-       
   fun rember' x ys f prefix_cont =
     case ys of
          (y::ys) => if f x y then SOME (prefix_cont ys)
@@ -111,142 +69,20 @@ struct
                  NONE => NONE (* a need could not be met *)
                | SOME haves' => split needs haves')
 
+  val gensym = ref 0
 
+  fun fresh() =
+  let
+    val ans = !gensym
+    val () = gensym := ans + 1
+  in
+    ans
+  end
 
-  fun zip (xs, ys) =
-    case (xs, ys) of
-         (x::xs, y::ys) => (x,y)::zip(xs, ys)
-       | ([], []) => []
-       
-  
-  (* 
-  *  match_lists xs ys f -- use xs to plug ys; return used, unused, and matched
-  *
-  *  xs : 'a list           --- haves
-  *  ys : 'b list           --- needs
-  *  f  : 'b -> 'a -> bool  --- determine whether need is satisfied by a have
-  *  matched : 'b list      --- accumulator for matched needs so far
-  *  unmatched : 'b list    --- accumulator for unmatched needs so far
-  *  ===>
-  *     {unused : 'a list, matched : 'b list, unmatched : 'b list}
-  *
-  * where 
-  *   [unused] is the subset of xs not used to meet a need in ys,
-  *   [matched] is the subset of ys satisfied by an x, and
-  *   [unmatched] is the subset of ys not satisfied by an x.
-  *)
-  fun match_lists xs ys f matched unmatched =
-    case ys of 
-         []       => {unused = xs, sat = matched, unsat = unmatched}
-       | (y::ys)  =>
-           (case rember y xs f of
-                SOME xs' => match_lists xs' ys f (y::matched) unmatched
-               | NONE => match_lists xs ys f matched (y::unmatched))
-
-  (* resourceMaches have need => {unused : , sat : , unsat : } *)
-  fun resourceMatches have need =
-    match_lists have need match_snd [] []
-
-  val test_resources = [(1, "foo"), (2, "bar"), (3, "foo"), (4, "baz")]
-  val test_needs = ["foo", "bar", "bar", "quux"]
-
-
-  val test_neg = 
-    NTens (["a", "b"], 
-          NLolli (["c", "d"], NPos ["a", "d"]))
-
-  val test_ctx = generate_pattern ["a", "c"]
-
-  (* returns list of haves and a new neg 
-  *
-  *   attachHavesToNeeds resources N =>
-  *       (resources', N')
-  *   where resources' is all of the resources that did not
-  *     match up to an input in N,
-  *   and N' is the new interface with some of N's holes plugged by input
-  *     resources.
-  *
-  *   Note: this is the "proof-irrelevant" version.
-  * *)
-  fun attachHavesToNeeds (resources) (N : neg) =
-    case N of
-         NPos P => (resources, NPos P) (* No holes to plug *)
-       | NTens (P, N) => 
-          (* No immediate holes to plug, but nester expr might have some *)
-           let
-             val (unused, N') = attachHavesToNeeds resources N
-           in
-             (unused, NTens (P, N'))
-           end
-       | NLolli (P, N) => (* Some immediate holes might be pluggable *)
-           let
-             val {unused, sat, unsat} = resourceMatches resources P
-             val (unused', N') = attachHavesToNeeds unused N
-           in
-             (unused', NLolli (unsat, N'))
-           end
-
-  (* returns a proof term in addition to the above *)
-  (* Last case is complex
-  fun combineProofs (resources) (Pf : neg_proof) (N : neg) =
-    case (Pf, N) of
-         (Pos pf, NPos P) => (resources, Pos pf, NPos P)
-       | (NPair(posPf, negPf), NTens (P, N)) => 
-           let
-             val (unused, negPf', N') = combineProofs resources negPf N
-           in
-             (unused, NPair(posPf, negPf'), NTens (P, N'))
-           end
-       | (Lam (pat, negProof), NLolli (P, N)) =>
-           let
-             val {unused, sat, unsat} = resourceMatches resources P
-             val (unused', negPf', N') = combineProofs unused negProof N
-           in
-             (unused', NLolli (unsat, N'))
-           end
-  *)
-
-
-  (*
-
-  (* sequence an op of type S1 -o S2 with a term P : N *)
-  fun seq (oper : resource) (S1 : pos) (S2 : pos) (P : neg_proof) (N : neg)
-    : neg_proof * neg =
-    case (P, N) of
-         (P, NPos S) => 
-          let 
-            val pat = generate_pattern S1
-          in 
-            (Lam (pat, NPair (Res oper, P)), NLolli (S1, NTens (S2, N))) 
-          end
-       | (NPair(P1, P2), NTens (S3, N)) =>
-          let
-            val pat = generate_pattern S1
-          in
-            (Lam (pat, NPair (Res oper, NPair(P1, P2))),
-              NLolli (S1, NTens (S2, NTens (S3, N))))
-          end
-      (* Q: assume all lolli-typed tms are eta-long? *)
-       | (Lam (pat3, P), NLolli (S3, N)) =>
-          raise unimpl (*
-           let
-             val pattern1 = generate_pattern S1
-             val have_types = posToList S2
-             val pattern2 = generate_pattern S2
-             val have_resources = zip pattern2 have_types
-             val {unused, sat, unsat} = resourceMatches have_resources S3
-             val unsatType = atomListToPos unsat
-             val pattern3 = generate_pattern unsat
-           in
-             (Lam (pattern1, Let (pattern2, oper, 
-                NPair (resListToProof unused, 
-                  Lam (pattern3, *)
-
-  fun compile (alpha : btl) =
-    case alpha of
-         _ => raise unimpl
-
-  (* tests *)
-  *)
+  fun generate_pattern (P : pos) =
+    case P of
+         [] => []
+       | (x::xs) => (fresh(), x)::(generate_pattern xs)
+ 
 
 end

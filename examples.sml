@@ -41,9 +41,9 @@ struct
 
   val unlock_spec =
     {name = "unlock",
-    args = [],
-    antecedent = ["at_door", "door_locked", "have_key"],
-    consequent = ["at_door", "door_unlocked"]
+     args = [],
+     antecedent = ["at_door", "door_locked", "have_key"],
+     consequent = ["at_door", "door_unlocked"]
     }
 
   val smash_spec =
@@ -51,14 +51,14 @@ struct
      args = [],
      antecedent = ["at_door", "door_locked"],
      consequent = ["at_door", "door_open"]
-     }
+    }
 
   val walk_thru_spec =
     {name = "walk_through",
      args = [],
      antecedent = ["at_door", "door_open"],
      consequent = ["at_door", "through_door", "door_open"]
-     }
+    }
 
   val close_spec =
     {name = "close",
@@ -67,7 +67,7 @@ struct
      consequent = ["through_door", "door_unlocked"]
     }
 
-  val door_bot_spec = 
+  val door_bot_spec : spec = 
     [walk_to_spec, open_spec, unlock_spec, smash_spec, walk_thru_spec, close_spec]
 
   (* Initial state *)

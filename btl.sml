@@ -9,8 +9,6 @@ structure BTL = struct
   datatype btl = Seq of btl list | Sel of btl list 
                | Cond of pos * btl | Just of btl_op | Skip
                
-  type state = (var * atom) list
-  
   fun satisfies (state: state) (cond: pos) =
     true (* XXX *)
 
@@ -18,8 +16,8 @@ structure BTL = struct
     : (state option) * string =
     case lookupRule action spec of
          NONE => (NONE, "no rule for action "^action)
-       | SOME {pre, post} =>
-           (case split pre state of
+       | SOME {pre : pos, post : pos} =>
+           (case split (flatten pre) state of
                  NONE => (NONE, "FAILURE: action "^action)
                | SOME state' => 
                    let

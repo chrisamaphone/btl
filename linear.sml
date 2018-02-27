@@ -4,7 +4,12 @@ struct
   type term = string
   type predicate = string
   type atom = string (* Eventually: predicate * (term list) *)
-  type pos = atom list (* Arbitrary tensorings of atoms *)
+  (* type pos = atom list (* Arbitrary tensorings of atoms *) *)
+  (* Tensor and Opluses:
+  *   Positives P ::= *{P1, ..., Pn} | +{P1, ..., Pn}
+  * *)
+  datatype pos = Atom of atom | Tensor of pos list | OPlus of pos list 
+  (* Interfaces N ::= P | P -o N | P * N *)
   datatype neg = NPos of pos | NLolli of pos * neg | NTens of pos * neg
 
   type rulename = string
@@ -30,9 +35,9 @@ struct
     { name: rulename, 
       args: string list, 
       antecedent: pos,
-      consequent: pos}
+      consequent: pos }
   type spec = action_spec list
-  type state = (var * atom) list
+  type state = (var * pos) list
 
 
   exception unimpl
@@ -43,7 +48,7 @@ struct
        | ({name,args,antecedent,consequent}::spec) =>
           if not (name = rulename) then lookupRule rulename spec
           else
-            SOME {pre=antecedent : atom list, post=consequent : atom list}
+            SOME {pre=antecedent : pos, post=consequent : pos}
 
   fun rember' x ys f prefix_cont =
     case ys of
@@ -51,9 +56,9 @@ struct
                     else rember' x ys f (fn l => (prefix_cont (y::l)))
        | [] => NONE
 
-  (* rember : 'a -> 'b list -> ('a -> 'b -> bool) -> ('b list -> 'b list) 
+  (* rember : 'a -> 'b list -> ('a -> 'b -> bool)  
   *     -> 'b list option
-  * rember x ys f => NONE if x isn't in ys
+  * rember x ys f => NONE if x isn't in ys (according to f)
   *               => SOME ys' where ys' = ys - x
   *)
   fun rember x ys f = rember' x ys f (fn l => l)
@@ -61,11 +66,35 @@ struct
   fun equal x y = x = y
   fun match_snd x (y1, y2) = x = y2
 
-  fun split (needs : atom list) (haves : (var * atom) list) =
+  fun satisfies (Pneed : pos) (x, Phave : pos) =
+    case (Pneed, Phave) of
+         (Atom a, Atom b) => a = b
+       | (Atom a, OPlus []) => false
+       | (Atom a, OPlus (B::Bs)) =>
+           (satisfies (Atom a) (x, B)) andalso (satisfies (Atom a) (x, OPlus Bs))
+       | (Tensor _, _) => false (* should not happen *)
+       | (OPlus [], _) => true
+       | (OPlus (A::As), _) =>  (* Either we satisfy A or something in As *)
+           (satisfies A (x, Phave)) orelse (satisfies (OPlus As) (x, Phave))
+
+  fun flatten (P : pos) : pos list =
+    case P of
+         Atom a => [Atom a]
+       | Tensor [] => []
+       | Tensor (A::As) => (flatten A)@(flatten (Tensor As))
+       | OPlus [] => []
+       | OPlus (A::As) =>
+           let
+             val As' : pos list = flatten (OPlus As)
+           in
+             [OPlus ((flatten A : pos list)@As')]
+           end
+
+  fun split (needs : pos list) (haves : state) : state option =
     case needs of
          nil => SOME haves
        | (need::needs) => 
-           (case rember need haves match_snd of
+           (case rember (need : pos) haves satisfies of
                  NONE => NONE (* a need could not be met *)
                | SOME haves' => split needs haves')
 
@@ -79,10 +108,20 @@ struct
     ans
   end
 
-  fun generate_pattern (P : pos) =
+
+  fun atomize xs = map (fn x => Atom x) xs
+  fun tensorize xs = Tensor (atomize xs)
+
+  fun generate_pattern (P : pos) : (var * pos) list =
     case P of
-         [] => []
-       | (x::xs) => (fresh(), x)::(generate_pattern xs)
+         Atom a => [(fresh(), Atom a)]
+       | OPlus A => [(fresh(), OPlus A)]
+       | Tensor [] => []
+       | Tensor (P::Ps) => (generate_pattern P)@(generate_pattern (Tensor Ps))
  
+  fun generate_state (As : atom list) : (var * pos) list =
+    generate_pattern (tensorize As)
+
+
 
 end

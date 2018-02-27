@@ -161,6 +161,12 @@ struct
          (case lookupRule rulename sg of
                NONE => NONE
              | SOME {pre, post} => SOME (NLolli (pre, NPos post)))
+       | Seq [] => SOME (NPos [])
+       | Seq ((Just (rulename, args))::rest) =>
+           (case (lookupRule rulename sg, type_of (Seq rest) sg) of
+                 (NONE, _) => NONE
+               | (_, NONE) => NONE
+               | (SOME {pre, post}, SOME N) => SOME (seq pre post N))
 
   (* Tests *)
 
@@ -178,7 +184,14 @@ struct
   val test3_prog = Seq [Just Examples.unlock_door, Just Examples.open_door]
   val answer = 
     NLolli (["at_door", "door_locked", "have_key"],
-              NPos ["at_door", "door_open"])            
+              NPos ["at_door", "door_open"])       
+  (* XXX - test once sequence interfaces are implemented. *)
+
+  (* Example with selector - for testing once \oplus is available *)
+  val test4_prog = Sel [Just Examples.open_door, Just Examples.smash_door]
+  (* Answer is roughly: ((at_door * door_unlocked) + (at_door * door_locked))
+  *                   -o ((at_door * door_open) + (at_door * door_open)) *)
+
 
 
 end

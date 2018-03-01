@@ -182,7 +182,10 @@ struct
   fun sel (N1 : neg) (N2 : neg) : neg =
     case (N1, N2) of
          (NPos P1, NPos P2) => NPos (OPlus [P1, P2])
-       | (NPos P1, NTens (P2, N)) => NPlus (P1, NTens (P2, N))
+       | (NPos P1, NPlus (P2, N)) => NPlus (OPlus [P1, P2], N)
+       | (NPos P1, _) => NPlus (P1, N2)
+       | (_, NPos P2) => sel N2 N1
+       | (NTens (P1, N2), NTens (P2, N1)) => raise unimpl (* XXX *)
 
   open BTL
 

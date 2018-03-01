@@ -34,19 +34,38 @@ struct
                 SOME xs' => match_lists xs' ys f (y::matched) unmatched
                | NONE => match_lists xs ys f matched (y::unmatched))
 
-  (* resourceMaches have need => {unused : , sat : , unsat : } *)
+  (* resourceMaches have need => 
+  *   { unused : (var * pos) list, 
+  *     sat    : pos list, 
+  *     unsat  : pos list
+  *   } 
+  *
+  * *)
   fun resourceMatches have need =
-    match_lists have need match_snd [] []
+    match_lists have need satisfies [] []
+    : {unused : (var * pos) list, sat : pos list, unsat : pos list}
 
-  val test_resources = [(1, "foo"), (2, "bar"), (3, "foo"), (4, "baz")]
+  (* posMatches (have : (var * pos) list) (need : pos) =>
+  *   { unused : (var * pos) list, 
+  *     sat    : pos list, 
+  *     unsat  : pos list
+  *   } 
+  * *)
+  fun posMatches (have : (var * pos) list) (need : pos) =
+    case need of
+         Tensor Ps => resourceMatches have Ps
+       | _ => resourceMatches have [need]
+
+  val test_resources = 
+      [(1, Atom "foo"), (2, Atom "bar"), (3, Atom "foo"), (4, Atom "baz")]
   val test_needs = ["foo", "bar", "bar", "quux"]
 
 
   val test_neg = 
-    NTens (["a", "b"], 
-          NLolli (["c", "d"], NPos ["a", "d"]))
+    NTens (tensorize ["a", "b"], 
+          NLolli (tensorize ["c", "d"], NPos (tensorize ["a", "d"])))
 
-  val test_ctx = generate_pattern ["a", "c"]
+  val test_ctx = generate_state ["a", "c"]
 
   (* returns list of haves and a new neg 
   *
@@ -63,7 +82,7 @@ struct
     case N of
          NPos P => (resources, NPos P) (* No holes to plug *)
        | NTens (P, N) => 
-          (* No immediate holes to plug, but nester expr might have some *)
+          (* No immediate holes to plug, but nested expr might have some *)
            let
              val (unused, N') = attachHavesToNeeds resources N
            in
@@ -71,10 +90,10 @@ struct
            end
        | NLolli (P, N) => (* Some immediate holes might be pluggable *)
            let
-             val {unused, sat, unsat} = resourceMatches resources P
+             val {unused, sat, unsat : pos list} = posMatches resources P
              val (unused', N') = attachHavesToNeeds unused N
            in
-             (unused', NLolli (unsat, N'))
+             (unused', NLolli (Tensor unsat, N'))
            end
 
   (* returns a proof term in addition to the above *)
@@ -140,51 +159,73 @@ struct
     : neg =
     case N of
          NPos S => NLolli (S1, NTens (S2, N))
-       | NTens (S3, N) =>
+       | NTens (S3 : pos, N : neg) =>
               NLolli (S1, NTens (S2, NTens (S3, N)))
-       | NLolli (S3, N) =>
+       | NLolli (S3 : pos, N : neg) =>
            let
              val resources = generate_pattern S2
-             val {unused, sat, unsat} = resourceMatches resources S3
-             val unused_props = map (fn (x,A) => A) unused
+             val {unused, sat, unsat : pos list} = posMatches resources S3
+             val unused_props : (pos list) = map (fn (x,A) => A) unused
            in
              NLolli (S1,
-                NTens (unused_props, NLolli (unsat, N)))
+                NTens (Tensor unused_props, NLolli (Tensor unsat, N)))
            end
 
+  fun sel (N1 : neg) (N2 : neg) : neg =
+    case (N1, N2) of
+         (NPos P, _) => raise unimpl
 
   open BTL
 
+
+  fun ruleSpecToNeg rulename args sg =
+    (* args ignored for now *)
+    case lookupRule rulename sg of
+         NONE => NONE
+       | SOME {pre, post} => SOME (NLolli (pre, NPos post))
+
+  val NOne = NPos (Tensor []) (* neg for type 1 *)
+
   fun type_of (prog : btl) (sg : spec) : neg option =
     case prog of
-         Just (rulename, args) => 
-         (case lookupRule rulename sg of
-               NONE => NONE
-             | SOME {pre, post} => SOME (NLolli (pre, NPos post)))
-       | Seq [] => SOME (NPos [])
+         Skip => SOME NOne
+       | Just (rulename, args) => ruleSpecToNeg rulename args sg
+       | Seq [] => SOME NOne
+       | Seq [Just (rulename, args)] => ruleSpecToNeg rulename args sg
        | Seq ((Just (rulename, args))::rest) =>
            (case (lookupRule rulename sg, type_of (Seq rest) sg) of
                  (NONE, _) => NONE
                | (_, NONE) => NONE
                | (SOME {pre, post}, SOME N) => SOME (seq pre post N))
+      (* Missing: Seq (E1, E2) for general E1  *)
+       | Sel [] => SOME (NPos (OPlus []))
+       | Sel [Just (rulename, args)] => ruleSpecToNeg rulename args sg
+       | Sel (E1::rest) =>
+          (case (type_of E1 sg, type_of (Sel rest) sg) of
+                (NONE, _) => NONE
+              | (_, NONE) => NONE
+              | (SOME N1, SOME N2) => raise unimpl (* XXX *)
+          )
 
   (* Tests *)
 
   val test1_prog = Just (Examples.walk_to_door)
   val spec_doors = Examples.door_bot_spec
-  val SOME (NLolli (["at_L"],NPos ["at_door"])) 
-  = type_of test1_prog spec_doors
+  val test1_pass =
+  SOME (NLolli (Atom "at_L", NPos (Atom "at_door"))) 
+  = (type_of test1_prog spec_doors)
 
   val test2_prog = Just (Examples.unlock_door)
-  val SOME 
-    (NLolli (["at_door","door_locked","have_key"], 
-            NPos ["at_door","door_unlocked"])) 
-  = type_of test2_prog spec_doors
+  val test2_pass = 
+    SOME 
+    (NLolli (Tensor [Atom "at_door", Atom "door_locked", Atom "have_key"], 
+            NPos (Tensor [Atom "at_door", Atom "door_unlocked"]))) 
+  = (type_of test2_prog spec_doors)
 
   val test3_prog = Seq [Just Examples.unlock_door, Just Examples.open_door]
   val answer = 
-    NLolli (["at_door", "door_locked", "have_key"],
-              NPos ["at_door", "door_open"])       
+    NLolli (Tensor [Atom "at_door", Atom "door_locked", Atom "have_key"],
+              NPos (Tensor [Atom "at_door", Atom "door_open"]))       
   (* XXX - test once sequence interfaces are implemented. *)
 
   (* Example with selector - for testing once \oplus is available *)

@@ -88,6 +88,12 @@ struct
            in
              (unused, NTens (P, N'))
            end
+       | NPlus (P, N) =>
+           let
+             val (unused, N') = attachHavesToNeeds resources N
+           in
+             (unused, NTens (P, N'))
+           end
        | NLolli (P, N) => (* Some immediate holes might be pluggable *)
            let
              val {unused, sat, unsat : pos list} = posMatches resources P
@@ -161,6 +167,8 @@ struct
          NPos S => NLolli (S1, NTens (S2, N))
        | NTens (S3 : pos, N : neg) =>
               NLolli (S1, NTens (S2, NTens (S3, N)))
+       | NPlus (S3 : pos, N : neg) =>
+              NLolli (S1, NTens (S2, NPlus (S3, N)))
        | NLolli (S3 : pos, N : neg) =>
            let
              val resources = generate_pattern S2
@@ -173,7 +181,8 @@ struct
 
   fun sel (N1 : neg) (N2 : neg) : neg =
     case (N1, N2) of
-         (NPos P, _) => raise unimpl
+         (NPos P1, NPos P2) => NPos (OPlus [P1, P2])
+       | (NPos P1, NTens (P2, N)) => NPlus (P1, NTens (P2, N))
 
   open BTL
 

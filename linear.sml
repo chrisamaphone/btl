@@ -11,6 +11,7 @@ struct
   datatype pos = Atom of atom | Tensor of pos list | OPlus of pos list 
   (* Interfaces N ::= P | P -o N | P * N *)
   datatype neg = NPos of pos | NLolli of pos * neg | NTens of pos * neg
+                  | NPlus of pos * neg
 
   type rulename = string
 
@@ -72,6 +73,7 @@ struct
        | (Atom a, OPlus []) => false
        | (Atom a, OPlus (B::Bs)) =>
            (satisfies (Atom a) (x, B)) andalso (satisfies (Atom a) (x, OPlus Bs))
+       | (_, Tensor _) => false (* should not happen *)
        | (Tensor _, _) => false (* should not happen *)
        | (OPlus [], _) => true
        | (OPlus (A::As), _) =>  (* Either we satisfy A or something in As *)

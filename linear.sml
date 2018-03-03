@@ -85,6 +85,28 @@ struct
        | (OPlus (A::As), _) =>  (* Either we satisfy A or something in As *)
            (satisfies A (x, Phave)) orelse (satisfies (OPlus As) (x, Phave))
 
+  fun entails (P1 : pos) (P2 : pos) =
+    case (P1, P2) of
+         (Atom a, Atom b) => a = b
+       | (Atom a, OPlus []) => true
+       | (A, OPlus (B::Bs)) =>
+           (entails A B) orelse (entails A (OPlus Bs))
+       | (Tensor [], Tensor []) => true
+       | (Tensor [], Tensor _) => false
+       | (Tensor As, Tensor (B::Bs)) => 
+           let
+             fun reventail b a = entails a b
+           in
+            case rember B As reventail of
+                 NONE => false
+               | SOME As' => entails (Tensor As') (Tensor Bs)
+           end
+       | (OPlus [], _) => true
+       | (OPlus (A::As), _) =>  (* Either we satisfy A or something in As *)
+           (entails A P2) orelse (entails (OPlus As) P2)
+       | (_, _) => false
+
+
   fun flatten (P : pos) : pos list =
     case P of
          Atom a => [Atom a]

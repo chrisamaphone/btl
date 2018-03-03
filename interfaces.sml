@@ -174,7 +174,7 @@ struct
 
   (* The above but w/o proofs *)
   (* sequence an op of type S1 -o S2 with one of type N *)
-  fun seq (S1 : pos) (S2 : pos) (N : neg)
+  fun seqOneOp (S1 : pos) (S2 : pos) (N : neg)
     : neg =
     case N of
          NPos S => NLolli (S1, NTens (S2, N))
@@ -191,10 +191,10 @@ struct
              NLolli (S1,
                 NTens (Tensor unused_props, NLolli (Tensor unsat, N)))
            end
-
+  (* XXX - above is obsolete i think? *)
 
   (* Pull out any tensors into the flat list *)
-  fun flatten (Ps : pos list) =
+  fun flatten (Ps : pos list) : pos list =
     case Ps of [] => []
        | (P::Ps) => 
            (case P of
@@ -202,15 +202,62 @@ struct
                | OPlus ps => P::(flatten Ps)
                | Tensor ps => (flatten ps)@(flatten Ps))
 
+  fun join (S1 : pos) (S2 : pos) = Tensor (flatten [S1, S2])
 
-  fun smallerOPlus (Ps : pos list) =
+  fun stateToPos (St : (var * pos) list) =
   let
-    val flattened = flatten Ps
+    val props = map (fn (x,A) => A) St
   in
-    case removeDupes (fn (x:pos, y:pos) => x=y) flattened [] of
-         [P] => P
-       | Ps => OPlus Ps
+    Tensor props
   end
+
+  fun posToPosList S =
+    case S of
+         Tensor Ps => Ps
+       | _ => [S]
+
+  fun cut (SHave : pos) (N : neg) : neg = 
+    case posToPosList SHave of
+         [] => N
+       | _ => (
+    case N of
+         NPos S => NPos (join SHave S)
+       | NTens (S : pos, N : neg) =>
+           NTens (join SHave S, N)
+       | NPlus (N1 : neg, N2 : neg) =>
+           NTens (SHave, NPlus (N1, N2))
+       | NLolli (S : pos, N : neg) =>
+           let
+             val resources = generate_pattern SHave
+             val {unused, sat, unsat : pos list} = posMatches resources S
+             val unused_props : (pos list) = map (fn (x,A) => A) unused
+             val N' = (case unsat of 
+                            [] => N
+                          | [P] => NLolli (P, N)
+                          | _ => NLolli (Tensor unsat, N))
+           in
+             case unused_props of
+                  [] => N'
+                | [P] => NTens (P, N')
+                | _ => NTens (Tensor unused_props, N')
+           end
+    )
+
+  fun seq (N1 : neg) (N2 : neg) : neg =
+    case N1 of
+         NPos S => cut S N2
+       | NTens (S1, N1) => cut S1 (seq N1 N2)
+       | NLolli (S1, N1) => NLolli (S1, seq N1 N2)
+       | NPlus (Nopt1, Nopt2) => NPlus (seq Nopt1 N2, seq Nopt2 N2)
+
+
+  fun posEquiv (P1 : pos) (P2 : pos) : bool =
+    (entails P1 P2) andalso (entails P2 P1)
+
+
+  fun smallerOPlus (P1 : pos, P2 : pos) : pos =
+      if posEquiv P1 P2 then P1
+       else OPlus [P1, P2]
 
   fun smallerNPlus (N1, N2) =
     if N1 = N2 then N1 else NPlus (N1, N2)
@@ -218,11 +265,11 @@ struct
   (* computer a "smaller" type equiv to N1 + N2 *)
   fun sel (N1 : neg) (N2 : neg) : neg =
     case (N1, N2) of
-         (NPos P1, NPos P2) => NPos (smallerOPlus [P1, P2])
+         (NPos P1, NPos P2) => NPos (smallerOPlus (P1, P2))
        | (NPos P1, NPlus (N1, N2)) => NPlus (sel (NPos P1) N1, sel (NPos P1) N2)
        | (_, NPos P2) => sel N2 N1
        | (NLolli (P1, N1), NLolli (P2, N2)) =>
-            NLolli (smallerOPlus [P1, P2], sel N1 N2)
+            NLolli (smallerOPlus (P1, P2), sel N1 N2)
        | _ => smallerNPlus (N1, N2) 
 
   open BTL
@@ -242,11 +289,18 @@ struct
        | Just (rulename, args) => ruleSpecToNeg rulename args sg
        | Seq [] => SOME NOne
        | Seq [Just (rulename, args)] => ruleSpecToNeg rulename args sg
+       (*
        | Seq ((Just (rulename, args))::rest) =>
            (case (lookupRule rulename sg, type_of (Seq rest) sg) of
                  (NONE, _) => NONE
                | (_, NONE) => NONE
                | (SOME {pre, post}, SOME N) => SOME (seq pre post N))
+       *)
+       | Seq (E1::rest) =>
+           (case (type_of E1 sg, type_of (Seq rest) sg) of
+                 (NONE, _) => NONE
+               | (_, NONE) => NONE
+               | (SOME N1, SOME N2) => SOME (seq N1 N2))
       (* Missing: Seq (E1, E2) for general E1  *)
        | Sel [] => SOME (NPos (OPlus []))
        | Sel [Just (rulename, args)] => ruleSpecToNeg rulename args sg
@@ -284,15 +338,23 @@ struct
   *                   -o ((at_door * door_open) + (at_door * door_open)) *)
 
 
-  (* Trying to get rid of dupes in oplus *)
+  (* Debug - Trying to get rid of dupes in oplus
   val (SOME topen) = type_of (Just Examples.open_door) spec_doors
   val (SOME tsmash) = type_of (Just Examples.smash_door) spec_doors
   val (NLolli (_, open_con)) = topen
   val (NLolli (_, smash_con)) = tsmash
   val (NPos open_pos) = open_con
   val (NPos smash_pos) = smash_con
+  *)
 
+  val test5_prog = Sel [test3_prog, Just Examples.smash_door]
 
+  val test6_prog = Sel [Just Examples.open_door, test3_prog]
+
+  val test7_prog = 
+    Sel [Just Examples.open_door, test3_prog, Just Examples.smash_door]
+
+  val test8_prog = Examples.get_through_door
   
 
 end

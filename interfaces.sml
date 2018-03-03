@@ -9,6 +9,15 @@ struct
          (x::xs, y::ys) => (x,y)::zip(xs, ys)
        | ([], []) => []
        
+  fun removeDupes (f : 'a*'a -> bool) (xs : 'a list) (seen : 'a list) =
+    case xs of
+         [] => []
+       | (x::xs) =>
+          if member x seen f then
+            removeDupes f xs seen
+          else
+            x::(removeDupes f xs (x::seen))
+
   
   (* 
   *  match_lists xs ys f -- use xs to plug ys; return used, unused, and matched
@@ -70,7 +79,7 @@ struct
   (* returns list of haves and a new neg 
   *
   *   attachHavesToNeeds resources N =>
-  *       (resources', N')
+  *       [(resources', N'), ...] disjunctive possibilities
   *   where resources' is all of the resources that did not
   *     match up to an input in N,
   *   and N' is the new interface with some of N's holes plugged by input
@@ -78,28 +87,32 @@ struct
   *
   *   Note: this is the "proof-irrelevant" version.
   * *)
-  fun attachHavesToNeeds (resources) (N : neg) =
+  fun attachHavesToNeeds (resources : (var*pos) list) (N : neg)
+      : (((var*pos) list) * neg) list =
     case N of
-         NPos P => (resources, NPos P) (* No holes to plug *)
+         NPos P => [(resources, NPos P)] (* No holes to plug *)
        | NTens (P, N) => 
           (* No immediate holes to plug, but nested expr might have some *)
            let
-             val (unused, N') = attachHavesToNeeds resources N
+             val pluggedNPossibilities = attachHavesToNeeds resources N
+             fun retensor (unused, N') = (unused, NTens (P, N'))
            in
-             (unused, NTens (P, N'))
+             map retensor pluggedNPossibilities
            end
-       | NPlus (P, N) =>
+       | NPlus (N1, N2) =>
            let
-             val (unused, N') = attachHavesToNeeds resources N
+             val pluggedN1 = attachHavesToNeeds resources N1
+             val pluggedN2 = attachHavesToNeeds resources N2
            in
-             (unused, NTens (P, N'))
+             pluggedN1@pluggedN2
            end
        | NLolli (P, N) => (* Some immediate holes might be pluggable *)
            let
              val {unused, sat, unsat : pos list} = posMatches resources P
-             val (unused', N') = attachHavesToNeeds unused N
+             val pluggedNPossibilities = attachHavesToNeeds unused N
+             fun relolli (unused', N') = (unused', NLolli (Tensor unsat, N'))
            in
-             (unused', NLolli (Tensor unsat, N'))
+             map relolli pluggedNPossibilities
            end
 
   (* returns a proof term in addition to the above *)
@@ -167,8 +180,8 @@ struct
          NPos S => NLolli (S1, NTens (S2, N))
        | NTens (S3 : pos, N : neg) =>
               NLolli (S1, NTens (S2, NTens (S3, N)))
-       | NPlus (S3 : pos, N : neg) =>
-              NLolli (S1, NTens (S2, NPlus (S3, N)))
+       | NPlus (N1 : neg, N2 : neg) =>
+              NLolli (S1, NTens (S2, NPlus (N1, N2)))
        | NLolli (S3 : pos, N : neg) =>
            let
              val resources = generate_pattern S2
@@ -179,13 +192,38 @@ struct
                 NTens (Tensor unused_props, NLolli (Tensor unsat, N)))
            end
 
+
+  (* Pull out any tensors into the flat list *)
+  fun flatten (Ps : pos list) =
+    case Ps of [] => []
+       | (P::Ps) => 
+           (case P of
+                 Atom a => P::(flatten Ps)
+               | OPlus ps => P::(flatten Ps)
+               | Tensor ps => (flatten ps)@(flatten Ps))
+
+
+  fun smallerOPlus (Ps : pos list) =
+  let
+    val flattened = flatten Ps
+  in
+    case removeDupes (fn (x:pos, y:pos) => x=y) flattened [] of
+         [P] => P
+       | Ps => OPlus Ps
+  end
+
+  fun smallerNPlus (N1, N2) =
+    if N1 = N2 then N1 else NPlus (N1, N2)
+
+  (* computer a "smaller" type equiv to N1 + N2 *)
   fun sel (N1 : neg) (N2 : neg) : neg =
     case (N1, N2) of
-         (NPos P1, NPos P2) => NPos (OPlus [P1, P2])
-       | (NPos P1, NPlus (P2, N)) => NPlus (OPlus [P1, P2], N)
-       | (NPos P1, _) => NPlus (P1, N2)
+         (NPos P1, NPos P2) => NPos (smallerOPlus [P1, P2])
+       | (NPos P1, NPlus (N1, N2)) => NPlus (sel (NPos P1) N1, sel (NPos P1) N2)
        | (_, NPos P2) => sel N2 N1
-       | (NTens (P1, N2), NTens (P2, N1)) => raise unimpl (* XXX *)
+       | (NLolli (P1, N1), NLolli (P2, N2)) =>
+            NLolli (smallerOPlus [P1, P2], sel N1 N2)
+       | _ => smallerNPlus (N1, N2) 
 
   open BTL
 
@@ -216,7 +254,7 @@ struct
           (case (type_of E1 sg, type_of (Sel rest) sg) of
                 (NONE, _) => NONE
               | (_, NONE) => NONE
-              | (SOME N1, SOME N2) => raise unimpl (* XXX *)
+              | (SOME N1, SOME N2) => SOME (sel N1 N2)
           )
 
   (* Tests *)
@@ -246,5 +284,15 @@ struct
   *                   -o ((at_door * door_open) + (at_door * door_open)) *)
 
 
+  (* Trying to get rid of dupes in oplus *)
+  val (SOME topen) = type_of (Just Examples.open_door) spec_doors
+  val (SOME tsmash) = type_of (Just Examples.smash_door) spec_doors
+  val (NLolli (_, open_con)) = topen
+  val (NLolli (_, smash_con)) = tsmash
+  val (NPos open_pos) = open_con
+  val (NPos smash_pos) = smash_con
+
+
+  
 
 end

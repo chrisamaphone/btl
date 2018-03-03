@@ -11,7 +11,7 @@ struct
   datatype pos = Atom of atom | Tensor of pos list | OPlus of pos list 
   (* Interfaces N ::= P | P -o N | P * N *)
   datatype neg = NPos of pos | NLolli of pos * neg | NTens of pos * neg
-                  | NPlus of pos * neg
+                  | NPlus of neg * neg
 
   type rulename = string
 
@@ -63,6 +63,12 @@ struct
   *               => SOME ys' where ys' = ys - x
   *)
   fun rember x ys f = rember' x ys f (fn l => l)
+
+  fun member x ys f = 
+    case ys of
+         (y::ys) => if f(x,y) then true else member x ys f
+       | [] => false
+
 
   fun equal x y = x = y
   fun match_snd x (y1, y2) = x = y2
@@ -123,7 +129,6 @@ struct
  
   fun generate_state (As : atom list) : (var * pos) list =
     generate_pattern (tensorize As)
-
 
 
 end

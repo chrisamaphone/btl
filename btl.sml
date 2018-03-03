@@ -9,7 +9,7 @@ structure BTL = struct
   datatype btl = Seq of btl list | Sel of btl list 
                | Cond of pos * btl | Just of btl_op | Skip
                
-  fun satisfies (state: state) (cond: pos) =
+  fun holds_for (state: state) (cond: pos) =
     true (* XXX *)
 
   fun try_doing ((action, args) : btl_op) (state : state) (spec : spec) 
@@ -57,7 +57,7 @@ structure BTL = struct
                | SOME state' => (SOME state', "SUCCESS: selector"::trace)
           end
       | Cond (C, B) =>
-          if (satisfies state C) then 
+          if (holds_for state C) then 
             runTrace B state spec ("condition satisfied"::trace)
           else (NONE, "condition failed"::trace)
       | Just action => 

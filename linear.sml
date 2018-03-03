@@ -81,7 +81,7 @@ struct
            (satisfies (Atom a) (x, B)) andalso (satisfies (Atom a) (x, OPlus Bs))
        | (_, Tensor _) => false (* should not happen *)
        | (Tensor _, _) => false (* should not happen *)
-       | (OPlus [], _) => true
+       | (OPlus [], _) => false
        | (OPlus (A::As), _) =>  (* Either we satisfy A or something in As *)
            (satisfies A (x, Phave)) orelse (satisfies (OPlus As) (x, Phave))
 

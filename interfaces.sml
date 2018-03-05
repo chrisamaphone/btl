@@ -257,5 +257,6 @@ struct
 
   val test8_prog = Examples.get_through_door
   
+  fun test9 () = type_of Examples.testInvestigateSound Examples.sound_spec
 
 end

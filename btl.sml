@@ -8,6 +8,7 @@ structure BTL = struct
   (* skip | op; btl | ?pos.btl *)
   datatype btl = Seq of btl list | Sel of btl list 
                | Cond of pos * btl | Just of btl_op | Skip
+               | Repeat of btl
                
   fun holds_for (state: state) (cond: pos) =
     entails (stateToPos state) cond
@@ -36,6 +37,14 @@ structure BTL = struct
   fun runTrace (expr : btl) (state : state) (spec: spec) trace =
     case expr of
         Skip => (SOME state, ("SUCCESS: skip")::trace)
+      | Repeat B =>
+          let
+            val (stateOpt, trace) = runTrace B state spec trace
+          in
+            case stateOpt of
+                 SOME state' => runTrace (Repeat B) state' spec trace
+               | NONE => (NONE, "End of repeat"::trace)
+          end
       | Seq nil => (SOME state, ("SUCCESS: end of seq")::trace)
       | Seq (B::Bs) =>
           let

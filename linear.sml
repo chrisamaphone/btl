@@ -102,6 +102,7 @@ struct
                  NONE => false
                | SOME As' => entails (Tensor As') (Tensor Bs)
            end
+       | (Tensor As, B) => member B As (fn (b, a) => entails a b) 
        | (OPlus [], _) => true
        | (OPlus (A::As), _) =>  (* Have to satisfy P2 in all cases *)
            (entails A P2) andalso (entails (OPlus As) P2)

@@ -10,14 +10,14 @@ structure BTL = struct
                | Cond of pos * btl | Just of btl_op | Skip
                
   fun holds_for (state: state) (cond: pos) =
-    true (* XXX *)
+    entails (stateToPos state) cond
 
   fun try_doing ((action, args) : btl_op) (state : state) (spec : spec) 
     : (state option) * string =
     case lookupRule action spec of
          NONE => (NONE, "no rule for action "^action)
        | SOME {pre : pos, post : pos} =>
-           (case split (flatten pre) state of
+           (case split (flatten [pre]) state of
                  NONE => (NONE, "FAILURE: action "^action)
                | SOME state' => 
                    let

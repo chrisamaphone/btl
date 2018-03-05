@@ -115,106 +115,6 @@ struct
              map relolli pluggedNPossibilities
            end
 
-  (* returns a proof term in addition to the above *)
-  (*  XXX - Last case is complex
-  fun combineProofs (resources) (Pf : neg_proof) (N : neg) =
-    case (Pf, N) of
-         (Pos pf, NPos P) => (resources, Pos pf, NPos P)
-       | (NPair(posPf, negPf), NTens (P, N)) => 
-           let
-             val (unused, negPf', N') = combineProofs resources negPf N
-           in
-             (unused, NPair(posPf, negPf'), NTens (P, N'))
-           end
-       | (Lam (pat, negProof), NLolli (P, N)) =>
-           let
-             val {unused, sat, unsat} = resourceMatches resources P
-             val (unused', negPf', N') = combineProofs unused negProof N
-           in
-             (unused', NLolli (unsat, N'))
-           end
-  *)
-
-
-  (*
-
-  (* sequence an op of type S1 -o S2 with a term P : N *)
-  fun seq (oper : resource) (S1 : pos) (S2 : pos) (P : neg_proof) (N : neg)
-    : neg_proof * neg =
-    case (P, N) of
-         (P, NPos S) => 
-          let 
-            val pat = generate_pattern S1
-          in 
-            (Lam (pat, NPair (Res oper, P)), NLolli (S1, NTens (S2, N))) 
-          end
-       | (NPair(P1, P2), NTens (S3, N)) =>
-          let
-            val pat = generate_pattern S1
-          in
-            (Lam (pat, NPair (Res oper, NPair(P1, P2))),
-              NLolli (S1, NTens (S2, NTens (S3, N))))
-          end
-      (* Q: assume all lolli-typed tms are eta-long? *)
-       | (Lam (pat3, P), NLolli (S3, N)) =>
-          raise unimpl (*
-           let
-             val pattern1 = generate_pattern S1
-             val have_types = posToList S2
-             val pattern2 = generate_pattern S2
-             val have_resources = zip pattern2 have_types
-             val {unused, sat, unsat} = resourceMatches have_resources S3
-             val unsatType = atomListToPos unsat
-             val pattern3 = generate_pattern unsat
-           in
-             (Lam (pattern1, Let (pattern2, oper, 
-                NPair (resListToProof unused, 
-                  Lam (pattern3, *)
-  *)
-
-  (* The above but w/o proofs *)
-  (* sequence an op of type S1 -o S2 with one of type N *)
-  fun seqOneOp (S1 : pos) (S2 : pos) (N : neg)
-    : neg =
-    case N of
-         NPos S => NLolli (S1, NTens (S2, N))
-       | NTens (S3 : pos, N : neg) =>
-              NLolli (S1, NTens (S2, NTens (S3, N)))
-       | NPlus (N1 : neg, N2 : neg) =>
-              NLolli (S1, NTens (S2, NPlus (N1, N2)))
-       | NLolli (S3 : pos, N : neg) =>
-           let
-             val resources = generate_pattern S2
-             val {unused, sat, unsat : pos list} = posMatches resources S3
-             val unused_props : (pos list) = map (fn (x,A) => A) unused
-           in
-             NLolli (S1,
-                NTens (Tensor unused_props, NLolli (Tensor unsat, N)))
-           end
-  (* XXX - above is obsolete i think? *)
-
-  (* Pull out any tensors into the flat list *)
-  fun flatten (Ps : pos list) : pos list =
-    case Ps of [] => []
-       | (P::Ps) => 
-           (case P of
-                 Atom a => P::(flatten Ps)
-               | OPlus ps => P::(flatten Ps)
-               | Tensor ps => (flatten ps)@(flatten Ps))
-
-  fun join (S1 : pos) (S2 : pos) = Tensor (flatten [S1, S2])
-
-  fun stateToPos (St : (var * pos) list) =
-  let
-    val props = map (fn (x,A) => A) St
-  in
-    Tensor props
-  end
-
-  fun posToPosList S =
-    case S of
-         Tensor Ps => Ps
-       | _ => [S]
 
   fun cut (SHave : pos) (N : neg) : neg = 
     case posToPosList SHave of
@@ -289,19 +189,11 @@ struct
        | Just (rulename, args) => ruleSpecToNeg rulename args sg
        | Seq [] => SOME NOne
        | Seq [Just (rulename, args)] => ruleSpecToNeg rulename args sg
-       (*
-       | Seq ((Just (rulename, args))::rest) =>
-           (case (lookupRule rulename sg, type_of (Seq rest) sg) of
-                 (NONE, _) => NONE
-               | (_, NONE) => NONE
-               | (SOME {pre, post}, SOME N) => SOME (seq pre post N))
-       *)
        | Seq (E1::rest) =>
            (case (type_of E1 sg, type_of (Seq rest) sg) of
                  (NONE, _) => NONE
                | (_, NONE) => NONE
                | (SOME N1, SOME N2) => SOME (seq N1 N2))
-      (* Missing: Seq (E1, E2) for general E1  *)
        | Sel [] => SOME (NPos (OPlus []))
        | Sel [Just (rulename, args)] => ruleSpecToNeg rulename args sg
        | Sel (E1::rest) =>
@@ -310,6 +202,15 @@ struct
               | (_, NONE) => NONE
               | (SOME N1, SOME N2) => SOME (sel N1 N2)
           )
+       | Cond (condition : pos, E : btl) =>
+           (case type_of E sg of
+                 NONE => NONE
+               | SOME N => 
+                   let
+                     val N' = NLolli (condition, NTens (condition, N))
+                   in
+                     SOME N'
+                   end)
 
   (* Tests *)
 

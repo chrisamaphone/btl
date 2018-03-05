@@ -85,14 +85,15 @@ struct
        | (OPlus (A::As), _) =>  (* Either we satisfy A or something in As *)
            (satisfies A (x, Phave)) orelse (satisfies (OPlus As) (x, Phave))
 
+  (* affine entailment *)
   fun entails (P1 : pos) (P2 : pos) =
     case (P1, P2) of
          (Atom a, Atom b) => a = b
        | (Atom a, OPlus []) => true
        | (A, OPlus (B::Bs)) =>
            (entails A B) orelse (entails A (OPlus Bs))
-       | (Tensor [], Tensor []) => true
-       | (Tensor [], Tensor _) => false
+       | (_, Tensor []) => true (* make 1st arg Tensor [] for linear *)
+       | (Tensor [], Tensor (B::Bs)) => false
        | (Tensor As, Tensor (B::Bs)) => 
            let
              fun reventail b a = entails a b
@@ -102,11 +103,12 @@ struct
                | SOME As' => entails (Tensor As') (Tensor Bs)
            end
        | (OPlus [], _) => true
-       | (OPlus (A::As), _) =>  (* Either we satisfy A or something in As *)
-           (entails A P2) orelse (entails (OPlus As) P2)
+       | (OPlus (A::As), _) =>  (* Have to satisfy P2 in all cases *)
+           (entails A P2) andalso (entails (OPlus As) P2)
        | (_, _) => false
 
 
+       (* XXX - superceded by flatten: pos list -> pos list?
   fun flatten (P : pos) : pos list =
     case P of
          Atom a => [Atom a]
@@ -118,7 +120,7 @@ struct
              val As' : pos list = flatten (OPlus As)
            in
              [OPlus ((flatten A : pos list)@As')]
-           end
+           end *)
 
   fun split (needs : pos list) (haves : state) : state option =
     case needs of
@@ -151,6 +153,29 @@ struct
  
   fun generate_state (As : atom list) : (var * pos) list =
     generate_pattern (tensorize As)
+
+  (* Pull out any tensors into the flat list *)
+  fun flatten (Ps : pos list) : pos list =
+    case Ps of [] => []
+       | (P::Ps) => 
+           (case P of
+                 Atom a => P::(flatten Ps)
+               | OPlus ps => P::(flatten Ps)
+               | Tensor ps => (flatten ps)@(flatten Ps))
+
+  fun join (S1 : pos) (S2 : pos) = Tensor (flatten [S1, S2])
+
+  fun stateToPos (St : (var * pos) list) =
+  let
+    val props = map (fn (x,A) => A) St
+  in
+    Tensor props
+  end
+
+  fun posToPosList S =
+    case S of
+         Tensor Ps => Ps
+       | _ => [S]
 
 
 end

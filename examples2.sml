@@ -111,22 +111,12 @@ struct
    * into LL better. All the specs are temp.
    *)
   val bt =
-    Seq [
-      Sel [
-        Cond (Atom "no_target", Just select_target),
-        Just do_nothing
-      ],
-      Sel [
-        Cond (Atom "melee_range_T", Just melee_attack),
-        Seq [
-          Sel [
-            Cond (Atom "close_range_T", Just use_auto_fire),
-            Just use_burst_fire
-          ],
-          Just ranged_attack
-        ]
-      ]
-    ]
+    Seq [ Sel [ Cond (Atom "no_target", Just select_target),
+                Just do_nothing],
+          Sel [ Cond (Atom "melee_range_T", Just melee_attack),
+                Seq [ Sel [ Cond (Atom "close_range_T", Just use_auto_fire),
+                            Just use_burst_fire],
+                      Just ranged_attack]]]
 
   fun test prog init = run prog (generate_state init) bt_spec
 
@@ -134,4 +124,95 @@ struct
   fun test2 () = test bt ["target_T", "melee_range_T"]
   fun test3 () = test bt ["no_target", "close_range_T"]
   fun test4 () = test bt ["no_target"]
+
+end
+
+structure InstantaneousDoorExample =
+struct
+  open BTL
+
+  (* the door example, but as a state-chooser instead of a synchronous action *)
+
+  val door : term list = ["door"]
+  
+  fun act action objects = (action, objects)
+  fun nullary action = (action, [])
+
+  fun specToAction {name, args, antecedent, consequent} =
+    Just (nullary name) (* XXX assumes no args *)
+  
+  val walk_to_door : btl_op = act "walk_to" door
+  val open_door : btl_op = act "open" door
+  val unlock_door : btl_op = act "unlock" door
+  val smash_door : btl_op = act "smash" door
+  val walk_through_door : btl_op = act "walk_through" door
+  val close_door : btl_op = act "close" door
+  val done : btl_op = act "done" door
+
+  val door_locked = Atom "door_locked"
+  val door_closed = OPlus [Atom "door_closed", Atom "door_locked"]
+  val through_door = Atom "through_door"
+
+  val walk_to_spec =
+    {name = "walk_to",
+     args = [] : string list,
+     antecedent = Atom "at_L",
+     consequent = tensorize ["at_L", "walking_to_door"]
+     }
+
+  val open_spec =
+    {name = "open",
+     args = [] : string list,
+     antecedent = tensorize ["at_door", "door_unlocked"],
+     consequent = tensorize ["at_door", "opening_door"]
+     }
+
+  val unlock_spec =
+    {name = "unlock",
+     args = [] : string list,
+     antecedent = tensorize ["at_door", "door_locked", "have_key"],
+     consequent = tensorize ["at_door", "unlocking_door"]
+    }
+
+  val smash_spec =
+    {name = "smash",
+     args = [] : string list,
+     antecedent = tensorize ["at_door", "door_locked"],
+     consequent = tensorize ["at_door", "smashing_door"]
+    }
+
+  val walk_thru_spec =
+    {name = "walk_through",
+     args = [] : string list,
+     antecedent = tensorize ["at_door", "door_open"],
+     consequent = tensorize ["at_door", "door_open", "walking_through_door"]
+    }
+
+  val close_spec =
+    {name = "close",
+     args = [] : string list,
+     antecedent = tensorize ["through_door", "door_open"],
+     consequent = tensorize ["through_door", "closing_door"]
+    }
+
+  val door_bot_spec : spec = 
+    [walk_to_spec, open_spec, unlock_spec, smash_spec, walk_thru_spec, close_spec]
+
+  val get_door_open : btl =
+    Sel [ Cond(door_locked, Sel [Just unlock_door, Just smash_door]),
+          Just open_door ]
+  val ensure_closed : btl =
+    Sel [ Cond(door_closed, Just done), Just close_door ]
+
+  val get_through_door : btl =
+    Sel [ Cond(through_door, ensure_closed),
+          Cond(door_closed, get_door_open),
+          Just walk_through_door,
+          Just walk_to_door]
+
+  fun test init = run get_through_door (generate_state init) door_bot_spec
+
+  fun test1 () = test ["at_L", "door_locked"]
+  fun test2 () = test ["at_L", "door_locked", "have_key"]
+  fun test3 () = test ["at_door", "door_locked", "have_key"]
 end

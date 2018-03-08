@@ -116,6 +116,15 @@ struct
            end
 
 
+  (* Really should rename "reduce"
+  *
+  * cut(S, N) --> N' 
+  *   S, N |- N'
+  *
+  * The idea is N' is more "reduced" - resources in S
+  *   might interact with resource requirements in N.
+  *   
+  * *)
   fun cut (SHave : pos) (N : neg) : neg = 
     case posToPosList SHave of
          [] => N
@@ -126,7 +135,9 @@ struct
            NTens (join SHave S, N)
        | NPlus (N1 : neg, N2 : neg) =>
            NTens (SHave, NPlus (N1, N2))
+           (* XXX - why not NPlus (cut SHave N1, cut SHave N2) ? *)
        | NLolli (S : pos, N : neg) =>
+           (* XXX - recursively cut SHave into N? *)
            let
              val resources = generate_pattern SHave
              val {unused, sat, unsat : pos list} = posMatches resources S
@@ -159,14 +170,14 @@ struct
       if posEquiv P1 P2 then P1
        else OPlus [P1, P2]
 
-  fun smallerNPlus (N1, N2) =
+  fun smallerNPlus (N1 : neg, N2 : neg) =
     if N1 = N2 then N1 else NPlus (N1, N2)
 
   (* computer a "smaller" type equiv to N1 + N2 *)
   fun sel (N1 : neg) (N2 : neg) : neg =
     case (N1, N2) of
          (NPos P1, NPos P2) => NPos (smallerOPlus (P1, P2))
-       | (NPos P1, NPlus (N1, N2)) => NPlus (sel (NPos P1) N1, sel (NPos P1) N2)
+       | (NPos P1, NPlus (N1, N2)) => smallerNPlus (sel (NPos P1) N1, sel (NPos P1) N2)
        | (_, NPos P2) => sel N2 N1
        | (NLolli (P1, N1), NLolli (P2, N2)) =>
             NLolli (smallerOPlus (P1, P2), sel N1 N2)

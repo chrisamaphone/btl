@@ -206,7 +206,7 @@ struct
                | (_, NONE) => NONE
                | (SOME N1, SOME N2) => SOME (seq N1 N2))
        | Sel [] => SOME (NPos (OPlus []))
-       | Sel [Just (rulename, args)] => ruleSpecToNeg rulename args sg
+       | Sel [E1] => type_of E1 sg
        | Sel (E1::rest) =>
           (case (type_of E1 sg, type_of (Sel rest) sg) of
                 (NONE, _) => NONE

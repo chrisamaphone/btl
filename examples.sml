@@ -28,6 +28,8 @@ struct
           Just walk_through_door, 
           Just close_door]
 
+  val small_example : btl =
+    Sel [Just open_door, Seq [Just unlock_door, Just open_door]]
   
   (* Specification for actions *)
 

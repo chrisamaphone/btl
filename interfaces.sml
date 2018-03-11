@@ -76,45 +76,6 @@ struct
 
   val test_ctx = generate_state ["a", "c"]
 
-  (* returns list of haves and a new neg 
-  *
-  *   attachHavesToNeeds resources N =>
-  *       [(resources', N'), ...] disjunctive possibilities
-  *   where resources' is all of the resources that did not
-  *     match up to an input in N,
-  *   and N' is the new interface with some of N's holes plugged by input
-  *     resources.
-  *
-  *   Note: this is the "proof-irrelevant" version.
-  * *)
-  fun attachHavesToNeeds (resources : (var*pos) list) (N : neg)
-      : (((var*pos) list) * neg) list =
-    case N of
-         NPos P => [(resources, NPos P)] (* No holes to plug *)
-       | NTens (P, N) => 
-          (* No immediate holes to plug, but nested expr might have some *)
-           let
-             val pluggedNPossibilities = attachHavesToNeeds resources N
-             fun retensor (unused, N') = (unused, NTens (P, N'))
-           in
-             map retensor pluggedNPossibilities
-           end
-       | NPlus (N1, N2) =>
-           let
-             val pluggedN1 = attachHavesToNeeds resources N1
-             val pluggedN2 = attachHavesToNeeds resources N2
-           in
-             pluggedN1@pluggedN2
-           end
-       | NLolli (P, N) => (* Some immediate holes might be pluggable *)
-           let
-             val {unused, sat, unsat : pos list} = posMatches resources P
-             val pluggedNPossibilities = attachHavesToNeeds unused N
-             fun relolli (unused', N') = (unused', NLolli (Tensor unsat, N'))
-           in
-             map relolli pluggedNPossibilities
-           end
-
 
   (* Really should rename "reduce"
   *
@@ -168,10 +129,12 @@ struct
 
   fun smallerOPlus (P1 : pos, P2 : pos) : pos =
       if posEquiv P1 P2 then P1
-       else OPlus [P1, P2]
+      else OPlus [P1, P2]
 
   fun smallerNPlus (N1 : neg, N2 : neg) =
-    if N1 = N2 then N1 else NPlus (N1, N2)
+    if N1 = N2 then N1 
+    else 
+      NPlus (N1, N2)
 
   (* computer a "smaller" type equiv to N1 + N2 *)
   fun sel (N1 : neg) (N2 : neg) : neg =
@@ -218,56 +181,63 @@ struct
                  NONE => NONE
                | SOME N => 
                    let
-                     val N' = NLolli (condition, NTens (condition, N))
+                     val N' =
+                          NLolli (condition, cut condition N)
+                       (* NLolli (condition, NTens (condition, N)) *)
                    in
                      SOME N'
                    end)
 
   (* Tests *)
 
-  val test1_prog = Just (Examples.walk_to_door)
-  val spec_doors = Examples.door_bot_spec
+  val test1_prog = Just (DoorsExample.walk_to_door)
+  val spec_doors = DoorsExample.door_bot_spec
   val test1_pass =
   SOME (NLolli (Atom "at_L", NPos (Atom "at_door"))) 
   = (type_of test1_prog spec_doors)
 
-  val test2_prog = Just (Examples.unlock_door)
+  val test2_prog = Just (DoorsExample.unlock_door)
   val test2_pass = 
     SOME 
     (NLolli (Tensor [Atom "at_door", Atom "door_locked", Atom "have_key"], 
             NPos (Tensor [Atom "at_door", Atom "door_unlocked"]))) 
   = (type_of test2_prog spec_doors)
 
-  val test3_prog = Seq [Just Examples.unlock_door, Just Examples.open_door]
+  val test3_prog = Seq [Just DoorsExample.unlock_door, Just DoorsExample.open_door]
   val answer = 
     NLolli (Tensor [Atom "at_door", Atom "door_locked", Atom "have_key"],
               NPos (Tensor [Atom "at_door", Atom "door_open"]))       
   (* XXX - test once sequence interfaces are implemented. *)
 
   (* Example with selector - for testing once \oplus is available *)
-  val test4_prog = Sel [Just Examples.open_door, Just Examples.smash_door]
+  val test4_prog = Sel [Just DoorsExample.open_door, Just DoorsExample.smash_door]
   (* Answer is roughly: ((at_door * door_unlocked) + (at_door * door_locked))
   *                   -o ((at_door * door_open) + (at_door * door_open)) *)
 
 
   (* Debug - Trying to get rid of dupes in oplus
-  val (SOME topen) = type_of (Just Examples.open_door) spec_doors
-  val (SOME tsmash) = type_of (Just Examples.smash_door) spec_doors
+  val (SOME topen) = type_of (Just DoorsExample.open_door) spec_doors
+  val (SOME tsmash) = type_of (Just DoorsExample.smash_door) spec_doors
   val (NLolli (_, open_con)) = topen
   val (NLolli (_, smash_con)) = tsmash
   val (NPos open_pos) = open_con
   val (NPos smash_pos) = smash_con
   *)
 
-  val test5_prog = Sel [test3_prog, Just Examples.smash_door]
+  val test5_prog = Sel [test3_prog, Just DoorsExample.smash_door]
 
-  val test6_prog = Sel [Just Examples.open_door, test3_prog]
+  val test6_prog = Sel [Just DoorsExample.open_door, test3_prog]
 
   val test7_prog = 
-    Sel [Just Examples.open_door, test3_prog, Just Examples.smash_door]
+    Sel [Just DoorsExample.open_door, test3_prog, Just DoorsExample.smash_door]
 
-  val test8_prog = Examples.get_through_door
+  val test8_prog = DoorsExample.get_through_door
   
-  fun test9 () = type_of Examples.testInvestigateSound Examples.sound_spec
+  fun test9 () = 
+    type_of 
+    InvestigateExample.testInvestigateSound
+    InvestigateExample.sound_spec
+
+
 
 end

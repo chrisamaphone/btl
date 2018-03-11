@@ -164,7 +164,10 @@ struct
                | OPlus ps => P::(flatten Ps)
                | Tensor ps => (flatten ps)@(flatten Ps))
 
-  fun join (S1 : pos) (S2 : pos) = Tensor (flatten [S1, S2])
+  fun join (S1 : pos) (S2 : pos) = 
+    case flatten [S1, S2] of
+         [X] => X
+       | Xs => Tensor Xs
 
   fun stateToPos (St : (var * pos) list) =
   let

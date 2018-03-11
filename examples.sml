@@ -1,16 +1,25 @@
+
 structure Examples =
 struct
-
   open BTL
 
-  (* Doors example *)
-
-  val door : term list = ["door"]
-  
   fun act action objects = (action, objects)
   fun nullary action = (action, [])
   fun specToAction {name, args, antecedent, consequent} =
     Just (nullary name) (* XXX assumes no args *)
+
+  fun makePropoSpec (name: string, antecedent : pos, consequent : pos) =
+    {name = name, args = [] : string list, antecedent = antecedent, consequent =
+    consequent}
+end
+
+structure DoorsExample =
+struct
+  open Examples
+  
+  (* Doors example *)
+
+  val door : term list = ["door"]
   
   val walk_to_door : btl_op = act "walk_to" door
   val open_door : btl_op = act "open" door
@@ -92,8 +101,12 @@ struct
   fun test1 () = testDoors init_state1
   
   fun test2 () = testDoors init_state2
+end
 
+structure InvestigateExample =
+struct
 
+  open Examples
   (* Investigating a sound example *)
 
   (* propositions *)
@@ -158,3 +171,43 @@ struct
   fun test4 () = testInvestigate2 soundState1
 
 end
+
+structure RobotBatteryExample =
+struct
+  open Examples
+  
+  (* propositions *)
+  val charged_enough : pos = Atom "charged_enough"
+  val battery_low : pos = Atom "battery_low"
+
+  (* action specs *)
+  val charge_battery = 
+    makePropoSpec("charge_battery", OPlus [battery_low, charged_enough], charged_enough)
+
+  val other_tasks =
+    makePropoSpec("other_tasks", charged_enough, Tensor [])
+
+  val RobotBatterySpec = [charge_battery, other_tasks]
+
+  (* actions *)
+
+  val do_charge_battery : btl = specToAction charge_battery
+  val other_tasks : btl = specToAction other_tasks
+
+  val chargeOrSkip : btl =
+    Sel [ Cond (battery_low, do_charge_battery),
+          Cond (charged_enough, Skip)
+        ]
+
+  val testChargeFirst : btl =
+    Seq [
+      chargeOrSkip,
+      other_tasks
+    ]
+          
+  val batteryState1 = generate_state ["battery_low"]
+  val batteryState2 = generate_state ["charged_enough"]
+          
+
+end
+

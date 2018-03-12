@@ -94,9 +94,11 @@ struct
          NPos S => NPos (join SHave S)
        | NTens (S : pos, N : neg) =>
            NTens (join SHave S, N)
-       | NPlus (N1 : neg, N2 : neg) =>
+       (* | NPlus (N1 : neg, N2 : neg) =>
            NTens (SHave, NPlus (N1, N2))
-           (* XXX - why not NPlus (cut SHave N1, cut SHave N2) ? *)
+           (* XXX - why not NPlus (cut SHave N1, cut SHave N2) ? *) *)
+       | NWith (N1 : neg, N2 : neg) =>
+           NWith (cut SHave N1, cut SHave N2)
        | NLolli (S : pos, N : neg) =>
            (* XXX - recursively cut SHave into N? *)
            let
@@ -120,7 +122,8 @@ struct
          NPos S => cut S N2
        | NTens (S1, N1) => cut S1 (seq N1 N2)
        | NLolli (S1, N1) => NLolli (S1, seq N1 N2)
-       | NPlus (Nopt1, Nopt2) => NPlus (seq Nopt1 N2, seq Nopt2 N2)
+       (* | NPlus (Nopt1, Nopt2) => NPlus (seq Nopt1 N2, seq Nopt2 N2) *)
+       | NWith (Nopt1, Nopt2) => NWith (seq Nopt1 N2, seq Nopt2 N2)
 
 
   fun posEquiv (P1 : pos) (P2 : pos) : bool =
@@ -131,12 +134,15 @@ struct
       if posEquiv P1 P2 then P1
       else OPlus [P1, P2]
 
+      (*
   fun smallerNPlus (N1 : neg, N2 : neg) =
     if N1 = N2 then N1 
     else 
       NPlus (N1, N2)
+      *)
 
-  (* computer a "smaller" type equiv to N1 + N2 *)
+  (* compute a "smaller" type equiv to N1 + N2 *)
+  (* XXX - broken for soundness
   fun sel (N1 : neg) (N2 : neg) : neg =
     case (N1, N2) of
          (NPos P1, NPos P2) => NPos (smallerOPlus (P1, P2))
@@ -145,6 +151,7 @@ struct
        | (NLolli (P1, N1), NLolli (P2, N2)) =>
             NLolli (smallerOPlus (P1, P2), sel N1 N2)
        | _ => smallerNPlus (N1, N2) 
+  *)
 
   open BTL
 
@@ -174,7 +181,7 @@ struct
           (case (type_of E1 sg, type_of (Sel rest) sg) of
                 (NONE, _) => NONE
               | (_, NONE) => NONE
-              | (SOME N1, SOME N2) => SOME (sel N1 N2)
+              | (SOME N1, SOME N2) => SOME (NWith (N1, N2)) (* sel N1 N2 *)
           )
        | Cond (condition : pos, E : btl) =>
            (case type_of E sg of

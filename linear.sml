@@ -11,7 +11,7 @@ struct
   datatype pos = Atom of atom | Tensor of pos list | OPlus of pos list 
   (* Interfaces N ::= P | P -o N | P * N *)
   datatype neg = NPos of pos | NLolli of pos * neg | NTens of pos * neg
-                  | NPlus of neg * neg
+                  (* | NPlus of neg * neg *) | NWith of neg * neg
 
   type rulename = string
 

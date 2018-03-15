@@ -39,6 +39,23 @@ struct
 
   val small_example : btl =
     Sel [Just open_door, Seq [Just unlock_door, Just open_door]]
+
+  val paper_example_1 : btl =
+    Seq [Just walk_to_door, Just open_door, Just walk_through_door, Just
+    close_door]
+
+
+  val paper_example_2 : btl =
+    Seq [ Sel [Just walk_to_door, Seq[]],
+          Just walk_through_door ]
+
+  val paper_example_3 : btl =
+    Seq [ Sel [Just walk_to_door, Seq[]],
+          Sel [ Cond (Atom "door_open", Seq[]), 
+                Just open_door,
+                Just smash_door],
+          Just walk_through_door,
+          Just close_door]
   
   (* Specification for actions *)
 

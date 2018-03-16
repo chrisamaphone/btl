@@ -118,12 +118,14 @@ struct
     )
 
   fun seq (N1 : neg) (N2 : neg) : neg =
-    case N1 of
-         NPos S => cut S N2
-       | NTens (S1, N1) => cut S1 (seq N1 N2)
-       | NLolli (S1, N1) => NLolli (S1, seq N1 N2)
-       (* | NPlus (Nopt1, Nopt2) => NPlus (seq Nopt1 N2, seq Nopt2 N2) *)
-       | NWith (Nopt1, Nopt2) => NWith (seq Nopt1 N2, seq Nopt2 N2)
+    case (N1, N2) of
+         (NPos S, NLolli (S2, N)) => NTens (S, NLolli (S2, N))
+       | (NPos S, NTens (S2, N2)) => NTens (join S S2, N2)
+       | (NPos S, NPos S2) => NPos (join S S2)
+       | (NPos S, NWith(N1, N2)) => NWith (seq (NPos S) N1, seq (NPos S) N2)
+       | (NTens (S1, N1), N2) => NTens (S1, (seq N1 N2))
+       | (NWith (N1, N2), N)  => NWith (seq N1 N, seq N2 N)
+       | (NLolli (S1, N1), N2) => NLolli (S1, seq N1 N2)
 
 
   fun posEquiv (P1 : pos) (P2 : pos) : bool =

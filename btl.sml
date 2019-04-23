@@ -30,6 +30,60 @@ structure BTL = struct
 
   type trace = string list
 
+  (* Small step semantics for the parallel case *)
+  datatype outcome = Cont of btl | Fail | Success
+
+  (* step E D S = (D', E')
+  *   where E is a BTL expression, D is a state, S is a spec,
+  *   D' is the next state, E' is the next expression.
+  * *)
+  fun step (expr : btl) (state : state) (spec : spec)
+    : (state * outcome) =
+    case expr of
+         Skip => (state, Success)
+       | Seq nil => (state, Success) (* Seq nil = Skip *)
+       | Sel nil => (state, Fail)
+       | Seq (B::Bs) =>
+           let
+             val (state', outcome) = step B state spec
+           in
+             case outcome of
+                  Success => (state', Cont (Seq Bs))
+                | Fail => (state', Fail)
+                | Cont B' => (state', Cont (Seq (B'::Bs)))
+           end
+       | Sel (B::Bs) =>
+           let
+             val (state', outcome) = step B state spec
+           in
+             case outcome of
+                  Success => (state', Success)
+                | Fail => (state', Cont (Sel Bs))
+                | Cont B' => (state', Cont (Sel (B'::Bs)))
+           end
+       | Cond (C, B) =>
+            if (holds_for state C) then
+              (state, Cont B)
+            else (state, Fail)
+       | Just action =>
+            let
+              val (stateOpt, _) = try_doing action state spec
+            in
+              case stateOpt of
+                   NONE => (state, Fail)
+                 | SOME state' => (state', Success)
+            end
+
+  (* Apply step as many times as possible *)
+  fun step_star expr state spec =
+  let
+    val (state', outcome) = step expr state spec
+  in
+    case outcome of
+         Success => (state', outcome)
+       | Fail => (state', outcome)
+       | Cont expr' => step_star expr' state' spec
+  end
 
   (* Return a new state on success; NONE on failure
   * as well as a trace of actions (string list)

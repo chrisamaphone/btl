@@ -224,7 +224,6 @@ struct
           
   val batteryState1 = generate_state ["battery_low"]
   val batteryState2 = generate_state ["charged_enough"]
-          
 
 end
 

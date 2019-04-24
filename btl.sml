@@ -1,14 +1,18 @@
 structure BTL = struct
   
   open LinearLogic (* for predicate language *)
+  open Util
 
   (* Behavior Tree expressions *)
   type rulename = string
   type btl_op = rulename * (term list)
-  (* skip | op; btl | ?pos.btl *)
+
+  (* BTL expressions 
+   *  e ::= e;e | e+e | ?pos.btl | op | skip | e* | e||e 
+   *)
   datatype btl = Seq of btl list | Sel of btl list 
                | Cond of pos * btl | Just of btl_op | Skip
-               | Repeat of btl
+               | Repeat of btl | Par of btl list
                
   fun holds_for (state: state) (cond: pos) =
     entails (stateToPos state) cond
@@ -73,6 +77,28 @@ structure BTL = struct
                    NONE => (state, Fail)
                  | SOME state' => (state', Success)
             end
+       | Repeat B =>
+           let
+             val (state', outcome) = step B state spec
+           in
+             case outcome of
+                  Cont B' => (state', Cont (Seq [B', Repeat B]))
+                | _ => (state', Cont (Repeat B)) (* on finish, repeat B again *)
+           end
+       | Par Bs =>
+           (* Choose a random process to evolve *)
+           (* Alternative: generate list of all possible evolutions *)
+           case Bs of
+                [] => (state, Success)
+              | Bs =>
+           let
+             val (B, Bs') = separateRandom Bs
+             val (state', outcome) = step B state spec
+           in
+             case outcome of
+                  Cont B' => (state', Cont (Par (B'::Bs')))
+                | _ => (state', Cont (Par Bs'))
+           end
 
   (* Apply step as many times as possible *)
   fun step_star expr state spec =

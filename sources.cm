@@ -1,4 +1,7 @@
 Group is
+  $/basis.cm
+  $/smlnj-lib.cm
+  util.sml
   linear.sml
   btl.sml
   examples.sml

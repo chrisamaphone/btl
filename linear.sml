@@ -3,8 +3,8 @@ struct
   (* Linear logic propositions/types *)
   type term = string
   type predicate = string
-  type atom = string (* Eventually: predicate * (term list) *)
-  (* type pos = atom list (* Arbitrary tensorings of atoms *) *)
+  (* type atom = string *)
+  type atom = predicate * (term list)
   (* Tensor and Opluses:
   *   Positives P ::= *{P1, ..., Pn} | +{P1, ..., Pn}
   * *)
@@ -34,22 +34,23 @@ struct
   (* Signatures and contexts *)
   type action_spec = 
     { name: rulename, 
-      args: string list, 
-      antecedent: pos,
-      consequent: pos }
+      spec: string list ->
+        {antecedent: pos, consequent: pos }
+    }
   type spec = action_spec list
   type state = (var * pos) list
 
 
   exception unimpl
 
+  (* XXX todo next - specialize lookup to rule args *)
   fun lookupRule (rulename : string) (spec : spec) =
     case spec of
          nil => NONE
-       | ({name,args,antecedent,consequent}::spec) =>
-          if not (name = rulename) then lookupRule rulename spec
+       | ({name,spec=f}::rest) =>
+          if not (name = rulename) then lookupRule rulename rest
           else
-            SOME {pre=antecedent : pos, post=consequent : pos}
+            SOME f
 
   fun rember' x ys f prefix_cont =
     case ys of
@@ -142,8 +143,17 @@ struct
   end
 
 
-  fun atomize xs = map (fn x => Atom x) xs
-  fun tensorize xs = Tensor (atomize xs)
+  (* Functios for turning syntactic shorthand into proposition ASTs *)
+  fun atomize (p::args : string list) = (p, args) : atom
+  fun propifyAtom (a : atom) = Atom a
+  fun propifyAll (xs : string list list) = map (propifyAtom o atomize) xs : pos list
+    
+  fun tensorize (xs : string list list) = Tensor (propifyAll xs) : pos
+  
+  fun tensor (As : atom list) = Tensor (map (fn x => Atom x) As) : pos
+  
+  fun atom (s : string) = (s, []) : atom
+  fun propAt (s : string) = Atom (s, [])
 
   fun generate_pattern (P : pos) : (var * pos) list =
     case P of
@@ -153,7 +163,7 @@ struct
        | Tensor (P::Ps) => (generate_pattern P)@(generate_pattern (Tensor Ps))
  
   fun generate_state (As : atom list) : (var * pos) list =
-    generate_pattern (tensorize As)
+    generate_pattern (tensor As)
 
   (* Pull out any tensors into the flat list *)
   fun flatten (Ps : pos list) : pos list =

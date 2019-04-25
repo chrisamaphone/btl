@@ -21,8 +21,11 @@ structure BTL = struct
     : (state option) * string =
     case lookupRule action spec of
          NONE => (NONE, "no rule for action "^action)
-       | SOME {pre : pos, post : pos} =>
-           (case split (flatten [pre]) state of
+       | SOME f =>
+           let
+             val {antecedent=pre, consequence=post} = f args
+           in
+             case split (flatten [pre]) state of
                  NONE => (NONE, "FAILURE: action "^action)
                | SOME state' => 
                    let
@@ -30,7 +33,7 @@ structure BTL = struct
                    in
                      (SOME state'', "SUCCESS: action "^action)
                    end
-            )
+           end
 
   type trace = string list
 

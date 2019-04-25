@@ -19,105 +19,160 @@ struct
   
   (* Doors example *)
 
-  val door : term list = ["door"]
+  val bot1 : term list = ["bot1"]
+  val bot2 : term list= ["bot2"]
   
-  val walk_to_door : btl_op = act "walk_to" door
-  val open_door : btl_op = act "open" door
-  val unlock_door : btl_op = act "unlock" door
-  val smash_door : btl_op = act "smash" door
-  val walk_through_door : btl_op = act "walk_through" door
-  val close_door : btl_op = act "close" door
+  (* These names need to match the names of rules in the spec *)
+  fun walk_to_door bot : btl_op = act "walk_to" bot
+  fun open_door bot : btl_op = act "open" bot
+  fun unlock_door bot : btl_op = act "unlock" bot
+  fun smash_door bot : btl_op = act "smash" bot
+  fun walk_through_door bot : btl_op = act "walk_through" bot
+  fun close_door bot : btl_op = act "close" bot
 
-  val get_door_open : btl =
-    Sel [Just open_door, Seq [Just unlock_door, Just open_door], Just smash_door]
+  fun get_door_open bot : btl =
+    Sel [Just (open_door bot), 
+          Seq [
+            Just (unlock_door bot), 
+            Just (open_door bot)], 
+            Just (smash_door bot)]
 
-  val get_through_door : btl =
-    Seq [Just walk_to_door, 
-          get_door_open, 
-          Just walk_through_door, 
-          Just close_door]
+  fun get_through_door bot : btl =
+    Seq [Just (walk_to_door bot),
+          get_door_open bot,
+          Just (walk_through_door bot),
+          Just (close_door bot)]
 
   val small_example : btl =
-    Sel [Just open_door, Seq [Just unlock_door, Just open_door]]
+    Sel [Just (open_door bot1), 
+          Seq [ Just (unlock_door bot1), 
+                Just (open_door bot1)]]
 
   val paper_example_1 : btl =
-    Seq [Just walk_to_door, Just open_door, Just walk_through_door, Just
-    close_door]
+    Seq [Just (walk_to_door bot1), 
+         Just (open_door bot1), 
+         Just (walk_through_door bot1), 
+         Just (close_door bot1)]
 
 
   val paper_example_2 : btl =
-    Seq [ Sel [Just walk_to_door, Seq[]],
-          Just walk_through_door ]
+    Seq [ Sel [Just (walk_to_door bot1), Seq[]],
+          Just (walk_through_door bot1) ]
 
+          (* XXX - add bot1 arg
   val paper_example_3 : btl =
     Seq [ Sel [Just walk_to_door, Seq[]],
-          Sel [ Cond (Atom "door_open", Seq[]), 
+          Sel [ Cond (propAt "door_open", Seq[]), 
                 Just open_door,
                 Just smash_door],
           Just walk_through_door,
           Just close_door]
-  
+          *)
+
   (* Specification for actions *)
 
   val walk_to_spec =
     {name = "walk_to",
-     args = [] : string list,
-     antecedent = Atom "at_L",
-     consequent = Atom "at_door"
+     spec = fn agent =>
+      { antecedent = Atom ("at_L", agent), 
+        consequent = Atom ("at_door", agent) }
      }
 
-  val open_spec =
-    {name = "open",
-     args = [] : string list,
-     antecedent = tensorize ["at_door", "door_unlocked"],
-     consequent = tensorize ["at_door", "door_open"]
-     }
-
-  val unlock_spec =
-    {name = "unlock",
-     args = [] : string list,
-     antecedent = tensorize ["at_door", "door_locked", "have_key"],
-     consequent = tensorize ["at_door", "door_unlocked"]
+  fun open_spec agent =
+    { name = "open",
+      spec = fn agent =>
+        { antecedent = tensorize ["at_door"::agent, "door_unlocked"],
+          consequent = tensorize ["at_door"::agent, "door_open"]}
     }
 
-  val smash_spec =
-    {name = "smash",
-     args = [] : string list,
-     antecedent = tensorize ["at_door", "door_locked"],
-     consequent = tensorize ["at_door", "door_open"]
+  fun unlock_spec agent =
+    { name = "unlock",
+      spec = fn agent =>
+        { antecedent = 
+            tensorize 
+              [["at_door", agent], ["door_locked"], ["have_key", agent]],
+          consequent = 
+            tensorize 
+              [["at_door", agent], ["door_unlocked"]]}
     }
 
-  val walk_thru_spec =
-    {name = "walk_through",
-     args = [] : string list,
-     antecedent = tensorize ["at_door", "door_open"],
-     consequent = tensorize ["at_door", "through_door", "door_open"]
+  fun smash_spec agent =
+    { name = "smash",
+      spec = fn agent =>
+      { antecedent = tensorize [["at_door", agent], ["door_locked"]],
+        consequent = tensorize [["at_door", agent], ["door_open"]] }
     }
 
-  val close_spec =
-    {name = "close",
-     args = [] : string list,
-     antecedent = tensorize ["through_door", "door_open"],
-     consequent = tensorize ["through_door", "door_unlocked"]
+  fun walk_thru_spec agent =
+    { name = "walk_through",
+      spec = fn agent =>
+        { antecedent = tensorize [["at_door"% agent], ["door_open"]],
+          consequent = 
+            tensorize 
+              [["at_door", agent], ["through_door", agent], ["door_open"]]
+        }
     }
 
-  val door_bot_spec : spec = 
+  fun close_spec agent =
+    { name = "close",
+      spec = fn agent =>
+        { antecedent = 
+            tensorize [["through_door", agent], ["door_open"]],
+          consequent = 
+            tensorize [["through_door", agent], ["door_unlocked"]]
+        }
+    }
+
+  val door_bot_rules : spec = 
     [walk_to_spec, open_spec, unlock_spec, smash_spec, walk_thru_spec, close_spec]
+  (*
+  (* ground all rules - XXX not doing this anymore; apply fn when look up rule *)
+  val door_bot_spec : spec =
+    List.concatMap (fn agent => (map (fn r => r agent) door_bot_rules)) agents 
+  *)
 
   (* Initial state *)
 
   val init_state1 : state =
-    generate_state ["at_L", "door_locked"]
+    generate_state [atomize ["at_L", "bot1"], atom "door_locked"]
 
   val init_state2 : state =
-    generate_state ["at_L", "door_locked", "have_key"]
+    generate_state 
+      [atomize ["at_L", "bot1"], 
+       atom "door_locked", 
+       atomize ["have_key", "bot1"]]
+
+  val init2bots : state =
+    generate_state
+      [ atomize ["at_L", "bot1"],
+        atomize ["at_L", "bot2"],
+        atomize ["have_key", "bot1"],
+        atom "door_locked" ]
 
 
+  (* Tests of run *)
   fun testDoors init = run get_through_door init door_bot_spec
 
   fun test1 () = testDoors init_state1
   
   fun test2 () = testDoors init_state2
+
+  (* Tests of step and step_star *)
+
+  (* REPL interaction with step:
+  *  - val (state, Cont next) = step get_through_door init_state1 door_bot_spec;
+  * Then do:
+  *  - val (state, Cont next) = step next state door_bot_spec;
+  * Repeatedly until the "Cont next" raises bind
+  *)
+  fun testStep () = step get_through_door init_state1 door_bot_spec
+    (* val (state, Cont next) = testStep() *)
+
+  (* Testing step for parallel procs *)
+  val two_door_bots = Par [get_through_door bot1, get_through_door bot2]
+  fun testStepPar () = step two_door_bots init_state1 door_bot_spec
+  (* val (state, Cont next) = testStepPar() *)
+
 end
 
 structure InvestigateExample =
@@ -127,10 +182,10 @@ struct
   (* Investigating a sound example *)
 
   (* propositions *)
-  val heard_noise : pos = Atom "heard_noise"
-  val has_target : pos = Atom "has_target"
-  val no_target : pos = Atom "no_target"
-  val at_target : pos = Atom "at_target"
+  val heard_noise : pos = propAt "heard_noise"
+  val has_target : pos = propAt "has_target"
+  val no_target : pos = propAt "no_target"
+  val at_target : pos = propAt "at_target"
 
   (* action specs *)
   val set_target =
@@ -177,7 +232,7 @@ struct
 
   val testRepeatInvestigate : btl = Repeat testInvestigateSound
 
-  val soundState1 = generate_state ["heard_noise", "no_target"]
+  val soundState1 = generate_state [atom "heard_noise", atom "no_target"]
 
   fun testInvestigate init = run testInvestigateSound init sound_spec
   fun testInvestigate2 init = run testRepeatInvestigate init sound_spec
@@ -194,8 +249,8 @@ struct
   open Examples
   
   (* propositions *)
-  val charged_enough : pos = Atom "charged_enough"
-  val battery_low : pos = Atom "battery_low"
+  val charged_enough : pos = propAt "charged_enough"
+  val battery_low : pos = propAt "battery_low"
 
   (* action specs *)
   val charge_battery = 
@@ -222,8 +277,8 @@ struct
       other_tasks
     ]
           
-  val batteryState1 = generate_state ["battery_low"]
-  val batteryState2 = generate_state ["charged_enough"]
+  val batteryState1 = generate_state [atom "battery_low"]
+  val batteryState2 = generate_state [atom "charged_enough"]
 
 end
 

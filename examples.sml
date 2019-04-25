@@ -71,55 +71,55 @@ struct
 
   (* Specification for actions *)
 
-  val walk_to_spec =
+  val walk_to_spec : action_spec =
     {name = "walk_to",
      spec = fn agent =>
       { antecedent = Atom ("at_L", agent), 
         consequent = Atom ("at_door", agent) }
      }
 
-  fun open_spec agent =
+  val open_spec : action_spec  =
     { name = "open",
       spec = fn agent =>
-        { antecedent = tensorize ["at_door"::agent, "door_unlocked"],
-          consequent = tensorize ["at_door"::agent, "door_open"]}
+        { antecedent = tensorize ["at_door"::agent, ["door_unlocked"]],
+          consequent = tensorize ["at_door"::agent, ["door_open"]]}
     }
 
-  fun unlock_spec agent =
+  val unlock_spec : action_spec  =
     { name = "unlock",
       spec = fn agent =>
         { antecedent = 
             tensorize 
-              [["at_door", agent], ["door_locked"], ["have_key", agent]],
+              ["at_door"::agent, ["door_locked"], "have_key"::agent],
           consequent = 
             tensorize 
-              [["at_door", agent], ["door_unlocked"]]}
+              ["at_door"::agent, ["door_unlocked"]]}
     }
 
-  fun smash_spec agent =
+  val smash_spec : action_spec  =
     { name = "smash",
       spec = fn agent =>
-      { antecedent = tensorize [["at_door", agent], ["door_locked"]],
-        consequent = tensorize [["at_door", agent], ["door_open"]] }
+      { antecedent = tensorize ["at_door"::agent, ["door_locked"]],
+        consequent = tensorize ["at_door"::agent, ["door_open"]] }
     }
 
-  fun walk_thru_spec agent =
+  val walk_thru_spec : action_spec  =
     { name = "walk_through",
       spec = fn agent =>
-        { antecedent = tensorize [["at_door"% agent], ["door_open"]],
+        { antecedent = tensorize ["at_door"::agent, ["door_open"]],
           consequent = 
             tensorize 
-              [["at_door", agent], ["through_door", agent], ["door_open"]]
+              ["at_door"::agent, "through_door"::agent, ["door_open"]]
         }
     }
 
-  fun close_spec agent =
+  val close_spec : action_spec  =
     { name = "close",
       spec = fn agent =>
         { antecedent = 
-            tensorize [["through_door", agent], ["door_open"]],
+            tensorize ["through_door"::agent, ["door_open"]],
           consequent = 
-            tensorize [["through_door", agent], ["door_unlocked"]]
+            tensorize ["through_door"::agent, ["door_unlocked"]]
         }
     }
 
@@ -151,7 +151,7 @@ struct
 
 
   (* Tests of run *)
-  fun testDoors init = run get_through_door init door_bot_spec
+  fun testDoors (init : state) = run (get_through_door bot1) init door_bot_rules
 
   fun test1 () = testDoors init_state1
   
@@ -165,15 +165,17 @@ struct
   *  - val (state, Cont next) = step next state door_bot_spec;
   * Repeatedly until the "Cont next" raises bind
   *)
-  fun testStep () = step get_through_door init_state1 door_bot_spec
+  fun testStep () = step (get_through_door bot1) init_state1 door_bot_rules
     (* val (state, Cont next) = testStep() *)
 
   (* Testing step for parallel procs *)
   val two_door_bots = Par [get_through_door bot1, get_through_door bot2]
-  fun testStepPar () = step two_door_bots init_state1 door_bot_spec
+  fun testStepPar () = step two_door_bots init2bots door_bot_rules
   (* val (state, Cont next) = testStepPar() *)
 
 end
+
+(* XXX - need to fix examples to have new action spec type 
 
 structure InvestigateExample =
 struct
@@ -282,3 +284,4 @@ struct
 
 end
 
+*)

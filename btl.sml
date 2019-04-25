@@ -23,7 +23,7 @@ structure BTL = struct
          NONE => (NONE, "no rule for action "^action)
        | SOME f =>
            let
-             val {antecedent=pre, consequence=post} = f args
+             val {antecedent=pre, consequent=post} = f args
            in
              case split (flatten [pre]) state of
                  NONE => (NONE, "FAILURE: action "^action)
@@ -159,7 +159,7 @@ structure BTL = struct
             (state', result::trace)
           end
 
-  fun run e state spec = 
+  fun run (e : btl) (state : state) (spec : spec) = 
     let
       val (outcome, trace) = runTrace e state spec []
     in

@@ -34,7 +34,7 @@ struct
   (* Signatures and contexts *)
   type action_spec = 
     { name: rulename, 
-      spec: string list ->
+      spec: term list ->
         {antecedent: pos, consequent: pos }
     }
   type spec = action_spec list

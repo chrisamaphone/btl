@@ -13,6 +13,7 @@ structure BTL = struct
   datatype btl = Seq of btl list | Sel of btl list 
                | Cond of pos * btl | Just of btl_op | Skip
                | Repeat of btl | Par of btl list
+               (* Repeat = repeat until success *)
                
   fun holds_for (state: state) (cond: pos) =
     entails (stateToPos state) cond
@@ -102,14 +103,16 @@ structure BTL = struct
                    NONE => (state, Fail, message)
                  | SOME state' => (state', Success, message)
             end
+       (* Repeat = repeat until success *)
        | Repeat B =>
            let
              val (state', outcome, message) = step B state spec
            in
              case outcome of
-                  Cont B' => (state', Cont (Seq [B', Repeat B]), message)
-                (* on finish, repeat B again *)
-                | _ => (state', Cont (Repeat B), message) 
+                  Cont B' => (state', Cont (Sel [B', Repeat B]), message)
+                (* on Failure, repeat B again *)
+                | Fail => (state', Fail, message) 
+                | Success => (state', Success, message)
            end
        | Par Bs =>
            (* Choose a random process to evolve *)

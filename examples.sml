@@ -37,6 +37,28 @@ struct
             Just (open_door bot)], 
             Just (smash_door bot)]
 
+  fun getOpenOrGoThrough bot : btl =
+    Repeat(
+      Sel [
+        Just (walk_through_door bot),
+        Seq [
+          get_door_open bot,
+          Just (walk_through_door bot)
+        ]
+      ])
+  
+  fun closeOrSkip bot : btl =
+    Sel [
+      Just (close_door bot),
+      Skip]
+
+
+  fun getThroughPar bot : btl =
+    Seq [Just (walk_to_door bot),
+          getOpenOrGoThrough bot,
+          closeOrSkip bot]
+          
+
   fun get_through_door bot : btl =
     Seq [Just (walk_to_door bot),
           get_door_open bot,
@@ -166,11 +188,12 @@ struct
   * Repeatedly until the "Cont next" raises bind
   *)
   fun testStep () = step (get_through_door bot1) init_state1 door_bot_rules
-    (* val (state, Cont next) = testStep() *)
+    (* val (state, Cont next, msg) = testStep() *)
 
   (* Testing step for parallel procs *)
-  val two_door_bots = Par [get_through_door bot1, get_through_door bot2]
-  fun testStepPar () = step two_door_bots init2bots door_bot_rules
+  val two_bad_door_bots = Par [get_through_door bot1, get_through_door bot2]
+  val two_good_door_bots = Par [getThroughPar bot1, getThroughPar bot2]
+  fun testStepPar () = step two_good_door_bots init2bots door_bot_rules
   (* val (state, Cont next) = testStepPar() *)
 
 end

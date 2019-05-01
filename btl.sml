@@ -17,102 +17,137 @@ structure BTL = struct
   fun holds_for (state: state) (cond: pos) =
     entails (stateToPos state) cond
 
-  fun try_doing ((action, args) : btl_op) (state : state) (spec : spec) 
+  fun commaSep (l : string list) =
+    case l of
+         [] => ""
+       | [x] => x
+       | (x::xs) => x ^ ", " ^ (commaSep xs)
+
+  fun actionToString (rulename, args) =
+    rulename ^ "(" ^ (commaSep args) ^ ")"
+
+
+  (* try doing (action, args) state spec = (state', msg)
+  *    where state' = SOME state' if the action transforms state into state';
+  *          state' = NONE if the action's preconditions don't hold;
+  *    and   msg  is a string indicating the success or failure of the
+  *    action.
+  *)
+  fun try_doing (action : btl_op) (state : state) (spec : spec) 
     : (state option) * string =
-    case lookupRule action spec of
-         NONE => (NONE, "no rule for action "^action)
-       | SOME f =>
-           let
-             val {antecedent=pre, consequent=post} = f args
-           in
-             case split (flatten [pre]) state of
-                 NONE => (NONE, "FAILURE: action "^action)
-               | SOME state' => 
-                   let
-                     val state'' = state' @ (generate_pattern post)
-                   in
-                     (SOME state'', "SUCCESS: action "^action)
-                   end
-           end
+    let
+      val (rulename, args) = action
+      val astring = actionToString action
+    in
+      case lookupRule rulename spec of
+          NONE => (NONE, "no rule for action " ^ astring)
+        | SOME f =>
+            let
+              val {antecedent=pre, consequent=post} = f args
+            in
+              case split (flatten [pre]) state of
+                  NONE => (NONE, "FAILURE: action "^astring)
+                | SOME state' => 
+                    let
+                      val state'' = state' @ (generate_pattern post)
+                    in
+                      (SOME state'', "SUCCESS: action "^astring)
+                    end
+            end
+    end
 
   type trace = string list
 
   (* Small step semantics for the parallel case *)
   datatype outcome = Cont of btl | Fail | Success
 
-  (* step E D S = (D', E')
+  (* step E D S = (D', E', message)
   *   where E is a BTL expression, D is a state, S is a spec,
-  *   D' is the next state, E' is the next expression.
+  *   D' is the next state, E' is the next expression,
+  *   and message is a report of what happened.
   * *)
   fun step (expr : btl) (state : state) (spec : spec)
-    : (state * outcome) =
+    : (state * outcome * string) =
     case expr of
-         Skip => (state, Success)
-       | Seq nil => (state, Success) (* Seq nil = Skip *)
-       | Sel nil => (state, Fail)
+         Skip => (state, Success, "SUCCESS: Done")
+       | Seq nil => (state, Success, "SUCCESS: Out of steps") (* Seq nil = Skip *)
+       | Sel nil => (state, Fail, "FAILURE: Out of options")
        | Seq (B::Bs) =>
            let
-             val (state', outcome) = step B state spec
+             val (state', outcome, message) = step B state spec
            in
              case outcome of
-                  Success => (state', Cont (Seq Bs))
-                | Fail => (state', Fail)
-                | Cont B' => (state', Cont (Seq (B'::Bs)))
+                  Success => (state', Cont (Seq Bs), message)
+                | Fail => (state', Fail, message)
+                | Cont B' => (state', Cont (Seq (B'::Bs)), message)
            end
        | Sel (B::Bs) =>
            let
-             val (state', outcome) = step B state spec
+             val (state', outcome, message) = step B state spec
            in
              case outcome of
-                  Success => (state', Success)
-                | Fail => (state', Cont (Sel Bs))
-                | Cont B' => (state', Cont (Sel (B'::Bs)))
+                  Success => (state', Success, message)
+                | Fail => (state', Cont (Sel Bs), message)
+                | Cont B' => (state', Cont (Sel (B'::Bs)), message)
            end
        | Cond (C, B) =>
             if (holds_for state C) then
-              (state, Cont B)
-            else (state, Fail)
+              (state, Cont B, "Condition succeeded")
+            else (state, Fail, "Condition failed")
        | Just action =>
             let
-              val (stateOpt, _) = try_doing action state spec
+              val (stateOpt, message) = try_doing action state spec
             in
               case stateOpt of
-                   NONE => (state, Fail)
-                 | SOME state' => (state', Success)
+                   NONE => (state, Fail, message)
+                 | SOME state' => (state', Success, message)
             end
        | Repeat B =>
            let
-             val (state', outcome) = step B state spec
+             val (state', outcome, message) = step B state spec
            in
              case outcome of
-                  Cont B' => (state', Cont (Seq [B', Repeat B]))
-                | _ => (state', Cont (Repeat B)) (* on finish, repeat B again *)
+                  Cont B' => (state', Cont (Seq [B', Repeat B]), message)
+                (* on finish, repeat B again *)
+                | _ => (state', Cont (Repeat B), message) 
            end
        | Par Bs =>
            (* Choose a random process to evolve *)
            (* Alternative: generate list of all possible evolutions *)
            case Bs of
-                [] => (state, Success)
+                [] => (state, Success, "SUCCESS: Out of behaviors")
               | Bs =>
            let
              val (B, Bs') = separateRandom Bs
-             val (state', outcome) = step B state spec
+             val (state', outcome, message) = step B state spec
            in
              case outcome of
-                  Cont B' => (state', Cont (Par (B'::Bs')))
-                | _ => (state', Cont (Par Bs'))
+                  Cont B' => (state', Cont (Par (B'::Bs')), message)
+                | _ => (state', Cont (Par Bs'), message)
            end
 
-  (* Apply step as many times as possible *)
-  fun step_star expr state spec =
+  (* Apply step as many times as possible; 
+  * return trace : (state * outcome * message) * list *)
+  fun step_star expr state spec trace =
   let
-    val (state', outcome) = step expr state spec
+    val next = step expr state spec
+    val trace' = next::trace
+    val (state', outcome, message) = next
   in
     case outcome of
-         Success => (state', outcome)
-       | Fail => (state', outcome)
-       | Cont expr' => step_star expr' state' spec
+         Success => rev trace'
+       | Fail => rev trace'
+       | Cont expr' => step_star expr' state' spec trace'
   end
+
+  fun step_star_simple expr state spec =
+  let
+    val trace = step_star expr state spec []
+    val msgs_only = map (fn (x,y,z) => z) trace
+  in
+    msgs_only
+  end
+
 
   (* Return a new state on success; NONE on failure
   * as well as a trace of actions (string list)

@@ -37,10 +37,12 @@ struct
             Just (open_door bot)], 
             Just (smash_door bot)]
 
+  val doorOpen = Atom ("door_open", [])
   fun getOpenOrGoThrough bot : btl =
     Repeat(
       Sel [
-        Just (walk_through_door bot),
+        Cond (doorOpen,
+          Just (walk_through_door bot)),
         Seq [
           get_door_open bot,
           Just (walk_through_door bot)

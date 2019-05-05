@@ -15,7 +15,7 @@ structure Util = struct
             | n => separateNth xs (n-1) (x::rest))
 
   (* Never call on empty list *)
-  fun separateRandom ls =
+  fun separateRandom (ls : 'a list) : ('a * 'a list) =
   let
     val idx = Random.randRange (0, List.length ls - 1) rando
     val SOME (x, xs) = separateNth ls idx []

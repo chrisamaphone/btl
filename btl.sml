@@ -59,9 +59,27 @@ structure BTL = struct
 
   type trace = string list
 
-  (* Small step semantics for the parallel case *)
+  (* Values *)
   datatype outcome = Cont of btl | Fail | Success
 
+  (* Rerun-from-root semantics *)
+  (*
+  fun eval (expr : btl) (state : state) (spec : spec)
+    : (state * outcome) =
+    case expr of
+         Skip => (state, Success, "SUCCESS: Done")
+       | Seq nil => (state, Success, "SUCCESS: Out of steps") 
+       | Seq
+       | Sel 
+       | Cond
+       | Just
+       (*
+       | Repeat
+       | Par
+      *)
+  *)
+
+  (* Small step semantics for the parallel case *)
   (* step E D S = (D', E', message)
   *   where E is a BTL expression, D is a state, S is a spec,
   *   D' is the next state, E' is the next expression,
@@ -129,6 +147,7 @@ structure BTL = struct
                 | _ => (state', Cont (Par Bs'), message)
            end
 
+
   (* Apply step as many times as possible; 
   * return trace : (state * outcome * message) * list *)
   fun step_star expr state spec trace =
@@ -151,11 +170,24 @@ structure BTL = struct
     msgs_only
   end
 
+  fun foldRandom (f : 'a -> 'b -> 'b) (base : 'b) (l : 'a list)
+    : 'b
+    =
+    case l of
+         [] => base : 'b
+       | l =>
+           let
+             val (x:'a, xs:'a list) = separateRandom l
+             val acc = foldRandom f base xs
+           in
+             f x acc : 'b
+           end
 
   (* Return a new state on success; NONE on failure
   * as well as a trace of actions (string list)
   * *)
-  fun runTrace (expr : btl) (state : state) (spec: spec) trace =
+  fun runTrace (expr : btl) (state : state) (spec: spec) (trace : string list)
+    : (state option) * (string list) =
     case expr of
         Skip => (SOME state, ("SUCCESS: skip")::trace)
       | Repeat B =>
@@ -196,12 +228,30 @@ structure BTL = struct
           in
             (state', result::trace)
           end
+      | Par Bs =>
+          let
+            fun f (e:btl) (s:state, t:string list) =
+            let
+              val (stateOpt, result) = runTrace e s spec trace
+            in
+              case stateOpt of
+                   NONE => (s, result@t)
+                 | SOME s' => (s', result@t)
+            end
+            val (state', trace) = foldRandom f (state, []) Bs
+          in
+            (SOME state', trace)
+          end
 
-  fun run (e : btl) (state : state) (spec : spec) = 
+  (* One run through the tree *)
+  fun run (e : btl) (state : state) (spec : spec) : (string list) * state = 
     let
-      val (outcome, trace) = runTrace e state spec []
+      val (stateOpt, trace) = runTrace e state spec []
+      val t = rev trace
     in
-      (rev trace, outcome)
+      case stateOpt of
+           NONE => (t, state)
+         | SOME state' => (t, state')
     end
 
 end

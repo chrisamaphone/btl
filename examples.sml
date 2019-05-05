@@ -180,22 +180,22 @@ struct
 
   fun get_door_open bot : btl =
     Sel [Just (open_door bot), 
-          Seq [
+          Sel [
             Just (unlock_door bot), 
             Just (open_door bot)], 
             Just (smash_door bot)]
 
   val doorOpen = Atom ("door_open", [])
   fun getOpenOrGoThrough bot : btl =
-    Repeat(
+    (* Repeat( *)
       Sel [
         Cond (doorOpen,
           Just (walk_through_door bot)),
-        Seq [
+        Sel [
           get_door_open bot,
           Just (walk_through_door bot)
         ]
-      ])
+      ] (* ) *)
   
   fun closeOrSkip bot : btl =
     Sel [
@@ -204,7 +204,7 @@ struct
 
 
   fun getThroughPar bot : btl =
-    Seq [Just (walk_to_door bot),
+    Sel [Just (walk_to_door bot),
           getOpenOrGoThrough bot,
           closeOrSkip bot]
           
@@ -281,7 +281,7 @@ struct
         { antecedent = tensorize ["at_door"::agent, ["door_open"]],
           consequent = 
             tensorize 
-              ["at_door"::agent, "through_door"::agent, ["door_open"]]
+              ["through_door"::agent, ["door_open"]]
         }
     }
 
@@ -345,6 +345,8 @@ struct
   val two_good_door_bots = Par [getThroughPar bot1, getThroughPar bot2]
   fun testStepPar () = step two_good_door_bots init2bots door_bot_rules
   (* val (state, Cont next) = testStepPar() *)
+
+  fun testRunPar () = run two_good_door_bots init2bots door_bot_rules
 
 end
 

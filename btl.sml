@@ -254,4 +254,15 @@ structure BTL = struct
          | SOME state' => (t, state')
     end
 
+  fun run_repeat (e : btl) (state : state) (spec : spec) (n : int) 
+    : (string list) * state =
+    if n <= 0 then ([], state)
+    else
+    let
+      val (trace, state') = run e state spec
+      val (rest, state'') = run_repeat e state' spec (n-1)
+    in
+      (trace@rest, state'')
+    end
+
 end

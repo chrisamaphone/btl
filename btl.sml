@@ -189,16 +189,16 @@ structure BTL = struct
   fun runTrace (expr : btl) (state : state) (spec: spec) (trace : string list)
     : (state option) * (string list) =
     case expr of
-        Skip => (SOME state, ("SUCCESS: skip")::trace)
+        Skip => (SOME state, (*("SUCCESS: skip")::*)trace)
       | Repeat B =>
           let
             val (stateOpt, trace) = runTrace B state spec trace
           in
             case stateOpt of
                  SOME state' => runTrace (Repeat B) state' spec trace
-               | NONE => (NONE, "End of repeat"::trace)
+               | NONE => (NONE, (*"End of repeat"::*)trace)
           end
-      | Seq nil => (SOME state, ("SUCCESS: end of seq")::trace)
+      | Seq nil => (SOME state, (*("SUCCESS: end of seq")::*)trace)
       | Seq (B::Bs) =>
           let
             val (stateOpt, trace) = runTrace B state spec trace
@@ -206,9 +206,9 @@ structure BTL = struct
             case stateOpt of
                  SOME state' => 
                     runTrace (Seq Bs) state' spec trace
-               | NONE => (NONE, "FAILURE: sequence"::trace)
+               | NONE => (NONE, (*"FAILURE: sequence"::*)trace)
           end
-      | Sel nil => (NONE, "FAILURE: end of sel"::trace)
+      | Sel nil => (NONE, (*"FAILURE: end of sel"::*)trace)
       | Sel (B::Bs) =>
           let
             val (stateOpt, trace) = runTrace B state spec trace
@@ -216,17 +216,20 @@ structure BTL = struct
             case stateOpt of
                  NONE => 
                     runTrace (Sel Bs) state spec trace
-               | SOME state' => (SOME state', "SUCCESS: selector"::trace)
+               | SOME state' => (SOME state', (*"SUCCESS: selector"::*)trace)
           end
       | Cond (C, B) =>
           if (holds_for state C) then 
-            runTrace B state spec ("condition satisfied"::trace)
-          else (NONE, "condition failed"::trace)
+            runTrace B state spec ((*"condition satisfied"::*)trace)
+          else (NONE, (*"condition failed"::*)trace)
       | Just action => 
           let
             val (state', result) = try_doing action state spec
           in
-            (state', result::trace)
+            (* only include successful actions in trace *)
+            case String.substring (result, 0, 7) of
+                 "SUCCESS" => (state', result::trace)
+               | _ => (state', trace)
           end
       | Par Bs =>
           let

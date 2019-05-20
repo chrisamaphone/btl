@@ -257,6 +257,7 @@ structure BTL = struct
          | SOME state' => (t, state')
     end
 
+  (* run n times *)
   fun run_repeat (e : btl) (state : state) (spec : spec) (n : int) 
     : (string list) * state =
     if n <= 0 then ([], state)
@@ -266,6 +267,40 @@ structure BTL = struct
       val (rest, state'') = run_repeat e state' spec (n-1)
     in
       (trace@rest, state'')
+    end
+
+  fun quitcommand sOpt = 
+    case sOpt of 
+         NONE => true 
+       | SOME s => (case String.substring (s, 0, 1) of
+                           "x" => true
+                         | "q" => true
+                         | "X" => true
+                         | "Q" => true
+                         | _ => false)
+
+  fun run_interact (e : btl) (state : state) (spec : spec)
+    : (string list) * state =
+    let
+      val input = TextIO.inputLine TextIO.stdIn
+    in
+      if quitcommand input then ([], state) (* Quit *)
+      else
+        let
+          val (trace, state') = run e state spec
+        in
+          case trace of
+               [] => ([], state) (* Done; no steps to report *)
+             | _ =>
+                 let
+                   val s = String.concatWith "\n" trace (* Print what everyone did that turn *)
+                   val () = print s
+                   val () = print "\n-----------"
+                   val (rest, state'') = run_interact e state' spec (* Continue *)
+                 in
+                  (trace@rest, state'')
+                 end
+        end
     end
 
 end

@@ -79,7 +79,8 @@ structure BTL = struct
       *)
   *)
 
-  (* Small step semantics for the parallel case *)
+  (* Small step semantics for the parallel case
+  *  Equivalent to HTN plans? *)
   (* step E D S = (D', E', message)
   *   where E is a BTL expression, D is a state, S is a spec,
   *   D' is the next state, E' is the next expression,

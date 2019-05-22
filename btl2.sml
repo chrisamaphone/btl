@@ -1,4 +1,4 @@
-structure BTL = struct
+structure BTL2 = struct
   
   open LinearLogic (* for predicate language *)
   open Util
@@ -12,7 +12,7 @@ structure BTL = struct
    *)
 
   datatype btl = Seq of btl list | Sel of btl list 
-               | Cond of pos * btl | Just of btl_op | Skip
+               | Cond of pos * btl | Just of btl_op * int | Skip
                | Repeat of btl | Par of btl list
                (* Repeat = repeat until success *)
                
@@ -61,7 +61,89 @@ structure BTL = struct
   type trace = string list
 
   datatype outcome = Fail | Success | Cont of btl
-  datatype action_outcome = FAIL | DONE of state | RUNNING of action * int * state
+
+  datatype path = Down of path | Right of path | Stop
+
+  val path_example = Down (Down (Right (Down Stop)))
+  val path_ex2 = Right (Right (Right (Down Stop)))
+
+  fun path_append p1 p2 =
+    case (p1, p2) of
+         (Stop, p2) => p2
+       | (p1, Stop) => p1
+       | (Down p1, p2) => Down (path_append p1 p2)
+       | (Right p1, p2) => Right (path_append p1 p2)
+
+  (* Returns SOME path to a node where f applies to the action pointed to by
+  *   that path; else NONE *)
+  (* XXX - need to consider case where seq above selector *)
+  fun traverse (e : btl) (state : state) (f : btl_op -> bool) 
+    : path option =
+    case e of
+         Just (action, n) =>
+          if f action then SOME Stop else NONE
+       | Seq (e1::es) =>
+           let
+             val pOpt = traverse e1 state f (* might need same as sel, or
+             distinguish success from fail *)
+           in
+             case pOpt of
+                  NONE => NONE
+                | SOME p => SOME (Down p)
+           end
+       | Seq nil => NONE
+       | Sel (e1::es) =>
+           let
+             val pOpt = traverse e1 state f
+           in
+             case pOpt of
+                  NONE =>
+                    (case traverse (Sel es) state f of
+                          NONE => NONE
+                        | SOME p => SOME (Right p))
+                | SOME p => SOME (Down p)
+           end
+        | Sel [] => NONE
+        | Cond (cond, e1) =>
+            if holds_for state cond then
+              let
+                val pOpt = traverse e1 state f
+              in
+                case pOpt of
+                     SOME p => SOME (Down p)
+                   | NONE => NONE
+              end
+            else NONE
+
+  val test_op = ("foo", [])
+  val test_op2 = ("bar", [])
+  val test_action = Just (test_op, 0)
+  val test_action2 = Just (test_op2, 0)
+  val test_cond = Atom ("p", [])
+
+  val test_tree : btl = 
+    Seq [ Cond ( test_cond, Sel [test_action, test_action] )
+          , test_action2 ]
+
+  val test_state_succeed = generate_pattern test_cond
+  val test_state_fail : state = []
+
+  fun test_f (name, args) = name = "bar"
+
+  (* test call: traverse test_tree test_state_succeed test_f *)
+
+  (*
+  fun choose_action (e : btl) (state : state) (spec : spec)
+      : (path * (btl_op option)) =
+      case e of
+           Seq (e1::es) =>
+           let
+             val (path, actionOpt) = choose_action path e1 state spec
+           in
+             case actionOpt of
+                  NONE => (path, NONE)
+                | SOME a => (
+                *)
 
   fun eval (e : btl) (state : state) (spec : spec)
       : (state * outcome) =
@@ -86,29 +168,31 @@ structure BTL = struct
                    | Cont e1' => (state', Cont e1')
               end
           | Sel [] => (state, Fail)
-          | Just action =>
+          | Just (action, n) =>
               let
                 val (stateOpt, msg) = try_doing action state spec
               in
-                case stateOpt of
-                     FAIL => (state, Fail)
-                   | DONE state' => (state', Success)
-                   | RUNNING (action', n, state') => 
-                       case n of (* XXX decrement n? *)
-                            0 => (state', Success)
-                          | _ => (state', Cont (Just action'))
+                case (n, stateOpt) of
+                     (_, NONE) => (state, Fail)
+                   | (0, SOME state') => (state', Success)
+                   | (_, SOME state') => (state', Cont (Just (action, n-1)))
               end
+
+  (* path checking impl
+  * proof of reactivity + memory semantics *)
 
 
   (* repeatedly eval e - XXX *)
-  fun idk e state spec =
+  (*
+  fun repeat_eval e state spec =
   let
     val (state', outcome) = eval e state spec
   in
     case outcome of
-         Fail =>
-       | Success =>
+         Fail => repeat_eval e state' spec
+       | Success => repeat_eval e state' spec
        | Cont e' => (* pass e to success continuation in rec call? *)
 
+       *)
 
 end

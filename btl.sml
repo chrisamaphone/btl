@@ -11,7 +11,8 @@ structure BTL = struct
    *  e ::= e;e | e+e | ?pos.btl | op | skip | e* | e||e 
    *)
   datatype btl = Seq of btl list | Sel of btl list 
-               | Cond of pos * btl | Just of btl_op | Skip
+               | Skip | Abort
+               | Cond of pos * btl | Just of btl_op 
                | Repeat of btl | Par of btl list
                (* Repeat = repeat until success *)
                
@@ -62,25 +63,13 @@ structure BTL = struct
   (* Values *)
   datatype outcome = Cont of btl | Fail | Success
 
-  (* Rerun-from-root semantics *)
-  (*
-  fun eval (expr : btl) (state : state) (spec : spec)
-    : (state * outcome) =
-    case expr of
-         Skip => (state, Success, "SUCCESS: Done")
-       | Seq nil => (state, Success, "SUCCESS: Out of steps") 
-       | Seq
-       | Sel 
-       | Cond
-       | Just
-       (*
-       | Repeat
-       | Par
-      *)
-  *)
 
-  (* Small step semantics for the parallel case
-  *  Equivalent to HTN plans? *)
+  (* Small step, "stateful" semantics -- sequences are interruptable by other processes
+  *   running in parallel (each step in a sequence only happens in 1 step),
+  *   but "non-reactive" in the sense that higher-up checks don't get re-checked
+  *     at each step.
+  *  Equivalent to Event-Driven BTs
+  *  Possible equivalent to HTN plans? *)
   (* step E D S = (D', E', message)
   *   where E is a BTL expression, D is a state, S is a spec,
   *   D' is the next state, E' is the next expression,
@@ -148,6 +137,84 @@ structure BTL = struct
                 | _ => (state', Cont (Par Bs'), message)
            end
 
+           (* XXX not working
+  (* Small-step semantics with monitors.
+  *   Sequences are interruptable by other behaviors running in parallel,
+  *   and also by higher-priority behaviors.
+  *   step_monitor returns a list of monitors in addition to new state.
+  *)
+  fun step_monitor (expr : btl) (state : state) (spec : spec)
+    : {state:state, result:outcome, message:string, monitors: btl list} =
+    case expr of
+         Skip => 
+          let
+            val result = Success
+            val message = "SUCCESS: Done"
+          in 
+            {state=state, result=result, message=message, monitors=[]}
+          end
+       | Abort =>
+           let
+             val result = Fail
+             val message = "FAILURE: Out of options"
+           in
+             {state=state, result=result, message=message, monitors=[]}
+           end
+       | Seq nil => step_monitor Skip state spec
+       | Sel nil => step_monitor Abort state spec
+       | Seq (B::Bs) =>
+           let
+             val {state=state', result, message, monitors} 
+                  = step_monitor B state spec
+             (* Rerun monitors? *)
+           in
+             case result of
+                  Success => 
+                    {state=state', result=Cont (Seq Bs),
+                      message=message, monitors=monitors}
+                | Fail => (* Clear monitors? *) 
+                    {state=state', result=Fail, message=message, monitors=[]}
+                | Cont B' =>
+                    {state=state', result=Cont (Seq (B'::Bs)), message=message,
+                      monitors=monitors}
+           end
+        | Sel (B::Bs) => (* Come back to this - may need to clear/update mons *)
+            let
+              val {state=state', outcome, message, monitors} 
+                  = step_monitor B state spec
+              (* Monitor every selector *)
+              val monitors = (Sel (B::Bs))::monitors 
+            in
+              case outcome of
+                   Success => 
+                     {state=state', result=Success, message=message,
+                       monitors=monitors}
+                 | Fail =>
+                     {state=state', result=Cont (Sel Bs), message=message,
+                        monitors=monitors}
+                 | Cont B' =>
+                     {state=state', result=Cont (Sel (B'::Bs)), message=message,
+                        monitors=monitors}
+            end
+        | B => (* otherwise same behavior as step *)
+            let
+              val (state, outcome, message) = step B state spec
+            in
+              {state=state, result=outcome, message=message, monitors=[]}
+            end
+            (* XXX revisit *)
+
+
+            (*
+            * *)
+    fun step_monitor_star expr state spec trace mons =
+      case mons of
+           [] => (* process expr *)
+         | b::bs =>
+            (* step b *)
+            (* step_monitor_star remaining bs *)
+            *)
+
 
   (* Apply step as many times as possible; 
   * return trace : (state * outcome * message) * list *)
@@ -184,6 +251,9 @@ structure BTL = struct
              f x acc : 'b
            end
 
+  (* Rerun-from-root ("reactive") semantics:
+  *   - Always re-check conditions
+  *   - Run multiple steps in a sequence atomically *)
   (* Return a new state on success; NONE on failure
   * as well as a trace of actions (string list)
   * *)

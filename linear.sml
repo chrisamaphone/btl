@@ -9,6 +9,7 @@ struct
   *   Positives P ::= *{P1, ..., Pn} | +{P1, ..., Pn}
   * *)
   datatype pos = Atom of atom | Tensor of pos list | OPlus of pos list 
+  val One = Tensor []
   (* Interfaces N ::= P | P -o N | P * N *)
   datatype neg = NPos of pos | NLolli of pos * neg | NTens of pos * neg
                   (* | NPlus of neg * neg *) | NWith of neg * neg
@@ -43,7 +44,6 @@ struct
 
   exception unimpl
 
-  (* XXX todo next - specialize lookup to rule args *)
   fun lookupRule (rulename : string) (spec : spec) =
     case spec of
          nil => NONE
@@ -90,7 +90,6 @@ struct
   fun entails (P1 : pos) (P2 : pos) =
     case (P1, P2) of
          (Atom a, Atom b) => a = b
-       | (Atom a, OPlus []) => true
        | (A, OPlus (B::Bs)) =>
            (entails A B) orelse (entails A (OPlus Bs))
        | (_, Tensor []) => true (* make 1st arg Tensor [] for linear *)
@@ -110,20 +109,6 @@ struct
        | (_, _) => false
 
 
-       (* XXX - superceded by flatten: pos list -> pos list?
-  fun flatten (P : pos) : pos list =
-    case P of
-         Atom a => [Atom a]
-       | Tensor [] => []
-       | Tensor (A::As) => (flatten A)@(flatten (Tensor As))
-       | OPlus [] => []
-       | OPlus (A::As) =>
-           let
-             val As' : pos list = flatten (OPlus As)
-           in
-             [OPlus ((flatten A : pos list)@As')]
-           end *)
-
   fun split (needs : pos list) (haves : state) : state option =
     case needs of
          nil => SOME haves
@@ -131,6 +116,7 @@ struct
            (case rember (need : pos) haves satisfies of
                  NONE => NONE (* a need could not be met *)
                | SOME haves' => split needs haves')
+
 
   val gensym = ref 0
 
@@ -143,7 +129,7 @@ struct
   end
 
 
-  (* Functios for turning syntactic shorthand into proposition ASTs *)
+  (* Functions for turning syntactic shorthand into proposition ASTs *)
   fun atomize (p::args : string list) = (p, args) : atom
   fun propifyAtom (a : atom) = Atom a
   fun propifyAll (xs : string list list) = map (propifyAtom o atomize) xs : pos list
@@ -190,6 +176,18 @@ struct
     case S of
          Tensor Ps => Ps
        | _ => [S]
+
+  (* running actions p -o q in state delta *)
+  fun execute_rule (delta : state) (p : pos) (q : pos)
+    : state option =
+    case split (flatten [p]) delta of
+         NONE => NONE (* Preconditions don't match *)
+       | SOME remainder =>
+           let
+             val post_state = generate_pattern q
+           in
+             SOME (remainder @ post_state)
+           end
 
 
 end

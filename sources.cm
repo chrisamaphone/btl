@@ -4,9 +4,8 @@ Group is
   util.sml
   linear.sml
   btl2.sml
-  (*
   examples.sml
-  sims.sml (* More examples *)
-  (* examples2.sml *)
-  (* interfaces.sml *)
-  *)
+  (* More examples
+  sims.sml
+  examples2.sml
+  interfaces.sml *)

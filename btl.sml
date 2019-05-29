@@ -69,7 +69,7 @@ structure BTL = struct
   *   but "non-reactive" in the sense that higher-up checks don't get re-checked
   *     at each step.
   *  Equivalent to Event-Driven BTs
-  *  Possible equivalent to HTN plans? *)
+  *  Possibly equivalent to HTN plans? *)
   (* step E D S = (D', E', message)
   *   where E is a BTL expression, D is a state, S is a spec,
   *   D' is the next state, E' is the next expression,

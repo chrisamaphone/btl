@@ -3,9 +3,10 @@ Group is
   $/smlnj-lib.cm
   util.sml
   linear.sml
-  btl.sml
   btl2.sml
+  (*
   examples.sml
   sims.sml (* More examples *)
   (* examples2.sml *)
   (* interfaces.sml *)
+  *)

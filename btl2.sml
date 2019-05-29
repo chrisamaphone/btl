@@ -1,4 +1,4 @@
-structure BTL2 = struct
+structure BTL = struct
   
   open LinearLogic (* for predicate language *)
   open Util
@@ -12,9 +12,10 @@ structure BTL2 = struct
    *)
 
   datatype btl = Seq of btl list | Sel of btl list 
-               | Cond of pos * btl | Just of btl_op | Skip
-               | Repeat of btl | Par of btl list
-               (* Repeat = repeat until success *)
+               | Just of btl_op
+
+  type path = int list
+  datatype status = Failed | Succeeded of state | Path of state * path
                
   fun holds_for (state: state) (cond: pos) =
     entails (stateToPos state) cond
@@ -35,6 +36,7 @@ structure BTL2 = struct
   *    and   msg  is a string indicating the success or failure of the
   *    action.
   *)
+  (*
   fun try_doing (action : btl_op) (state : state) (spec : spec) 
     : (state option) * string =
     let
@@ -57,86 +59,108 @@ structure BTL2 = struct
                     end
             end
     end
+    *)
 
-  type trace = string list
+  (* Succeeds with same state if action is a b or c, fails otherwise *)
+  fun try_doing (action : btl_op) (state : state) =
+  let
+    fun succeed x = 
+      let
+        val () = print ("doing "^ x ^"\n")
+      in
+        SOME state
+      end
+    fun fail x = 
+      let
+        val () = print ("couldn't do "^ x ^"\n")
+      in
+        NONE
+      end
+  in
+    case action of
+         ("a", _) => succeed "a"
+       | ("b", _) => succeed "b"
+       | ("c", _) => succeed "c"
+       | (rule, _) => fail rule
+  end
 
-  datatype status = Running | Succeeded | Failed 
-
-  type path = status list
-
-  (* pi is the last path run *)
-  fun eval (alpha : btl) (state : state) (pi : path)
-    : path =
-    case (alpha, pi) of
-         (* Sequences *)
-         (_, []) => eval alpha state [Running]
-         (Seq [], Running::pi) => Succeeded::pi
-       | (Seq (x::xs), Running::pi) =>
+  (* step (e : btl) (state : state) (p : path) 
+  *   returns status
+  *   = Failed if e results in failure
+  *   = Succeeded D if nothing left to be done, and new state is D
+  *   = Path (D, P) if next thing to do is at path P and new state is D
+  *   *)
+  fun step (e : btl) (state : state) (path : path) =
+  let
+    val (i, subpath) =
+      case path of
+           nil => (0, nil)
+         | x::xs => (x, xs)
+  in
+    case e of
+         Seq es => if i = length es then Succeeded state
+                   else
+                     let
+                       val subtree = List.nth (es, i)
+                       val outcome = step subtree state subpath
+                     in
+                       case outcome of
+                            Failed => Failed
+                          | Succeeded s => Path (s, [i+1])
+                          | Path (s, p) => Path (s, i::p)
+                     end
+       | Sel es => if i = length es then Failed
+                   else
+                     let
+                       val subtree = List.nth (es, i)
+                       val outcome = step subtree state subpath
+                     in
+                       case outcome of
+                            Failed => Path (state, [i+1])
+                          | Succeeded s => Succeeded s
+                          | Path (s, p) => Path (s, i::p)
+                     end
+       | Just a =>
            let
-             val status::newpath = eval x state pi
+             val outcome = try_doing a state
            in
-             case status of
-                  Failed => Failed::pi 
-                  Running => Running::newpath
-                | Succeeded => XXX (* XXX figure this ooout *)
+             case outcome of
+                  SOME s => Succeeded s
+                | NONE => Failed
            end
-       | (Seq (x::xs), Succeeded::pi) =>
-           let
-             val (newpath, actionOpt) = eval (Seq xs) state pi
-           in
-             (Succeeded::newpath, actionOpt)
-           end
-       | (Seq (x::xs), Failed::pi) =>
-           (Failed::pi, NONE)
-          (* Selectors *)
-       | (Sel [], Running::pi) => (Failed::pi, NONE)
-       | (Sel (x::xs), []) =>
-           let
-             val () = print "Initiating sel node\n"
-           in
-             eval x state [Running]
-           end
-       | (Sel (x::xs), Running::pi) =>
-           let 
-             val () = print 
-           eval x state pi
-       | (Sel (x::xs), Succeeded::Running::pi) =>
-           (Succeeded::pi, NONE)
-       | (Sel (x::xs), Failed::pi) =>
-           eval (Sel xs) state (Failed::pi)
-       | (Cond (phi, alpha'), pi) =>
-           if holds_for state phi then
-             let
-               val () = print "Cond node\n"
-             in
-               eval alpha' state (Succeeded::pi)
-             end
-           else
-             (Failed::pi, NONE)
-       | (Just btl_op, []) =>
-           ([Running], SOME btl_op)
-           (* other cases should be impossible? *)
-       | _ => (pi, NONE)
+  end
 
-  val test_op = ("foo", [])
-  val test_op2 = ("bar", [])
+  fun step_iter (e : btl) (state : state) =
+  let
+    fun loop (s : state) (p : path) =
+      case step e s p of
+           Failed => NONE
+         | Succeeded s => SOME s
+         | Path (s', p') => loop s' p'
+  in
+    loop state nil
+  end
+
+
+  
+  (* Tests *)
+  val test_op = ("a", []) (* will always succeed *)
+  val test_op2 = ("foo", []) (* will always fail *)
   val test_action = Just test_op
   val test_action2 = Just test_op2
   val test_cond = Atom ("p", [])
   val test_cond2 = Atom ("q", [])
 
   val test_tree : btl = 
-    Seq [ Cond ( test_cond, Sel [Cond (test_cond2, test_action), test_action2] )
-          , test_action2 ]
+    Seq [ Sel [test_action2, test_action] 
+          , test_action ]
 
   val test_state_succeed = generate_pattern test_cond
   val test_state_fail : state = []
   val test_state2 : state = generate_pattern test_cond2
 
-
-
   (* test call:
-  *   eval test_tree test_state_succeed [] *)
+  *   step_iter test_tree [] *)
 
 
   
